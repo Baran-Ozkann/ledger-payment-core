@@ -40,8 +40,9 @@ Have the entire infrastructure standing and CI green before any real code is wri
   ```
 - `docker-compose.yml`: PostgreSQL 16, Kafka (KRaft mode, **no** Zookeeper)
 - `V1__baseline.sql` — empty baseline migration
-- `AbstractIntegrationTest` — Testcontainers PostgreSQL via `@ServiceConnection`, container reuse enabled
-- One smoke test: context starts, Flyway ran, `/actuator/health` is UP
+- `AbstractIntegrationTest` — Testcontainers PostgreSQL via `@ServiceConnection`, **container reuse disabled**
+- One smoke test: context starts, Flyway ran, `/actuator/health` is UP. The Flyway assertion must prove Flyway ran **in this run** (e.g. assert the `installed_on` timestamp is after JVM start), not merely that a row exists.
+- `docs/.gitkeep` and a `.gitkeep` in every empty package, so no rule-guard path is ever missing
 - `.github/workflows/ci.yml`: `mvn verify` **plus the rule guard below**
 - `PROGRESS.md` (see template at the end of this document)
 - `.gitignore`, skeleton `README.md`
@@ -58,11 +59,27 @@ violation=0
 
 deny() {
   local desc="$1"; shift
-  if grep -rn "$@" >/dev/null 2>&1; then
-    echo "RULE VIOLATION: $desc"
-    grep -rn "$@" | head -20
-    violation=1
-  fi
+  local out status
+  out=$(grep -rn "$@" 2>&1)
+  status=$?
+  case $status in
+    0)
+      echo "RULE VIOLATION: $desc"
+      echo "$out" | head -20
+      violation=1
+      ;;
+    1)
+      : # no match, clean
+      ;;
+    *)
+      # grep could not complete the search - most often a path in the list does
+      # not exist. It exits 2 EVEN WHEN IT FOUND MATCHES, so treating a non-zero
+      # status as "clean" would silently disable the check. Fail loudly instead.
+      echo "GUARD ERROR: could not run check '$desc' (grep exit $status)"
+      echo "$out" | head -5
+      violation=1
+      ;;
+  esac
 }
 
 deny "floating point or BigDecimal in domain/service" \
@@ -89,12 +106,17 @@ deny "optimistic locking version column" \
 exit $violation
 ```
 
-Note the `deny` helper inverts grep's exit code correctly — a bare `grep ... && fail` under `set -e` would abort the script when grep finds nothing.
+Two things make this correct, and both were wrong in the first version of this plan:
 
-Some checks are inert in Phase 0 (the directories do not exist yet). That is fine; `grep -r` on a missing path simply finds nothing. They activate as the code arrives.
+**A check that cannot run must fail the build.** `grep -rn` exits 2 when any path in its list is missing — and it does so *even when it found matches in the paths that do exist*. The original helper tested only whether grep succeeded, so exit 2 read as "clean" and the check became a silent no-op that reported success. Distinguishing 0 / 1 / everything-else is the fix.
+
+**Every path in every check must exist from Phase 0 onward.** Commit `docs/.gitkeep` and `.gitkeep` in each empty package directory so no `deny` call is ever handed a missing path. If a later phase adds a path that does not exist yet, the guard now says so out loud instead of quietly passing.
 
 ### Pitfalls
-- Container reuse needs `testcontainers.reuse.enable=true` in `~/.testcontainers.properties`. It does not work in CI, only locally. Expected.
+- **Do not enable Testcontainers container reuse.** A warm container carries schema and rows across runs, which turns "the table exists" and "the sum of all entries is zero" into assertions about history rather than about this run. Verified failure mode: with reuse on, the full suite passes with Flyway *entirely disabled*, because the previous run's `flyway_schema_history` is still there. Phase 1a's trigger tests and Phase 2's property tests are exactly what a warm database renders meaningless. The few seconds saved are not worth a false green in a project whose only output is proof.
+- Any assertion about migrations must be about the current run, not about state that could have survived from an earlier one.
+- Give compose services **no** `container_name`. Hardcoding it defeats `COMPOSE_PROJECT_NAME`, so the Builder's and the Auditor's stacks collide.
+- Commit a Maven wrapper (`mvnw`, `mvnw.cmd`, `.mvn/wrapper/`) so a clean checkout can run the build without Maven preinstalled.
 - Put Kafka in compose but **do not wire it into tests** yet. A Kafka container before Phase 3 only inflates CI time.
 - Spring Boot 3.1+ `@ServiceConnection` removes the need for hand-written `@DynamicPropertySource`. Use it.
 - Agents reflexively add `spring-boot-starter-data-jpa`. It is banned; the rule guard catches it.

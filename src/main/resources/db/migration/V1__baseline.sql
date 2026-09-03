@@ -1,0 +1,1 @@
+-- Baseline: establishes the Flyway schema history. Tables arrive in V2.

@@ -34,9 +34,9 @@ public class LedgerService {
     }
 
     @Transactional
-    public Account createAccount(AccountType accountType, String ownerRef, boolean allowNegative) {
+    public Account createAccount(AccountType accountType, String ownerRef) {
         UUID publicId = UUID.randomUUID();
-        accounts.insert(publicId, accountType, ownerRef, allowNegative);
+        accounts.insert(publicId, accountType, ownerRef);
         return account(publicId);
     }
 

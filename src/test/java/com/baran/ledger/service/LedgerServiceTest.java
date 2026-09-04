@@ -26,7 +26,7 @@ class LedgerServiceTest extends AbstractIntegrationTest {
     @Test
     void transferMovesMoneyBetweenAccounts() {
         Account source = fundedAccount(5_000L);
-        Account destination = ledger.createAccount(AccountType.LIABILITY, "owner", false);
+        Account destination = ledger.createAccount(AccountType.LIABILITY, "owner");
 
         LedgerTransaction transaction = ledger.transfer(
                 source.publicId(), destination.publicId(), Money.of(1_200L), "salary");
@@ -59,8 +59,8 @@ class LedgerServiceTest extends AbstractIntegrationTest {
     }
 
     private Account fundedAccount(long amount) {
-        Account equity = ledger.createAccount(AccountType.EQUITY, "ledger-equity", true);
-        Account account = ledger.createAccount(AccountType.LIABILITY, "owner", false);
+        Account equity = ledger.createAccount(AccountType.EQUITY, "ledger-equity");
+        Account account = ledger.createAccount(AccountType.LIABILITY, "owner");
         ledger.fund(equity.publicId(), account.publicId(), Money.of(amount), "opening balance");
         return ledger.account(account.publicId());
     }

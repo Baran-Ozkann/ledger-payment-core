@@ -82,7 +82,7 @@ class TransferValidationTest extends ApiTestSupport {
     @Test
     void crossCurrencyTransferRejected() {
         UUID source = fundedAccount(1_000L);
-        UUID destination = foreignCurrencyAccount("USD", false);
+        UUID destination = foreignCurrencyAccount("USD", "LIABILITY");
         long transactionsBefore = transactionCount();
         long entriesBefore = entryCount();
 

@@ -25,12 +25,13 @@ public class AccountRepository {
         this.jdbc = jdbc;
     }
 
-    public long insert(UUID publicId, AccountType accountType, String ownerRef, boolean allowNegative) {
+    /** allow_negative is absent on purpose: it is generated from account_type and rejects a value. */
+    public long insert(UUID publicId, AccountType accountType, String ownerRef) {
         return jdbc.sql("""
-                        INSERT INTO accounts (public_id, account_type, owner_ref, currency, allow_negative)
-                        VALUES (?, ?, ?, ?, ?)
+                        INSERT INTO accounts (public_id, account_type, owner_ref, currency)
+                        VALUES (?, ?, ?, ?)
                         RETURNING id""")
-                .params(publicId, accountType.name(), ownerRef, Money.CURRENCY, allowNegative)
+                .params(publicId, accountType.name(), ownerRef, Money.CURRENCY)
                 .query(Long.class)
                 .single();
     }

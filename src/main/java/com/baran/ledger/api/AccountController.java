@@ -36,8 +36,7 @@ class AccountController {
             @RequestHeader(name = "X-Client-Id", required = false) String clientId,
             @RequestBody CreateAccountRequest request) {
         LOG.debug("Account creation requested by client {}", ClientId.require(clientId));
-        return AccountResponse.of(
-                ledger.createAccount(request.accountType(), request.ownerRef(), request.allowNegative()));
+        return AccountResponse.of(ledger.createAccount(request.accountType(), request.ownerRef()));
     }
 
     @GetMapping("/{publicId}")

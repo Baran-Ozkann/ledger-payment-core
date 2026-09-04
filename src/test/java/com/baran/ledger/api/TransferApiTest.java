@@ -34,8 +34,8 @@ class TransferApiTest extends ApiTestSupport {
 
     @Test
     void fundingHappyPath() {
-        UUID equity = createAccount("EQUITY", true);
-        UUID account = createAccount("LIABILITY", false);
+        UUID equity = createAccount("EQUITY");
+        UUID account = createAccount("LIABILITY");
 
         ApiResponse response = post("/v1/funding", transferBody(equity, account, 5_000L));
 
@@ -48,8 +48,8 @@ class TransferApiTest extends ApiTestSupport {
 
     @Test
     void fundingRequiresEquityToLiability() {
-        UUID source = createAccount("LIABILITY", true);
-        UUID destination = createAccount("LIABILITY", false);
+        UUID source = createAccount("LIABILITY");
+        UUID destination = createAccount("LIABILITY");
 
         ApiResponse response = post("/v1/funding", transferBody(source, destination, 100L));
 
@@ -77,8 +77,9 @@ class TransferApiTest extends ApiTestSupport {
 
     @Test
     void entriesCarryTheCurrencyOfTheirAccount() {
-        UUID source = foreignCurrencyAccount("USD", true);
-        UUID destination = foreignCurrencyAccount("USD", false);
+        // The source is EQUITY because only EQUITY may go negative, and it starts empty.
+        UUID source = foreignCurrencyAccount("USD", "EQUITY");
+        UUID destination = foreignCurrencyAccount("USD", "LIABILITY");
 
         ApiResponse response = post("/v1/transfers", transferBody(source, destination, 500L));
 

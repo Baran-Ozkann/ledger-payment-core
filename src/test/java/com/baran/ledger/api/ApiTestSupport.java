@@ -69,10 +69,10 @@ abstract class ApiTestSupport extends AbstractIntegrationTest {
                 .formatted(fromAccount, toAccount, amount);
     }
 
-    UUID createAccount(String accountType, boolean allowNegative) {
+    UUID createAccount(String accountType) {
         ApiResponse response = post("/v1/accounts", """
-                {"account_type": "%s", "owner_ref": "owner-%s", "allow_negative": %b}"""
-                .formatted(accountType, UUID.randomUUID(), allowNegative));
+                {"account_type": "%s", "owner_ref": "owner-%s"}"""
+                .formatted(accountType, UUID.randomUUID()));
 
         assertThat(response.status()).isEqualTo(HttpStatus.CREATED);
         return UUID.fromString((String) response.body().get("id"));
@@ -80,8 +80,8 @@ abstract class ApiTestSupport extends AbstractIntegrationTest {
 
     /** Money only enters the ledger through funding, so every balance starts at an EQUITY account. */
     UUID fundedAccount(long amount) {
-        UUID equity = createAccount("EQUITY", true);
-        UUID account = createAccount("LIABILITY", false);
+        UUID equity = createAccount("EQUITY");
+        UUID account = createAccount("LIABILITY");
         if (amount == 0L) {
             return account;
         }
@@ -95,12 +95,12 @@ abstract class ApiTestSupport extends AbstractIntegrationTest {
      * The ledger is single currency, so the API has no way to create anything but a TRY account.
      * A foreign-currency account is inserted directly, which is the only way to reach V7 at all.
      */
-    UUID foreignCurrencyAccount(String currency, boolean allowNegative) {
+    UUID foreignCurrencyAccount(String currency, String accountType) {
         UUID publicId = UUID.randomUUID();
         jdbc.sql("""
-                        INSERT INTO accounts (public_id, account_type, owner_ref, currency, allow_negative)
-                        VALUES (?, 'LIABILITY', ?, ?, ?)""")
-                .params(publicId, "owner-" + publicId, currency, allowNegative)
+                        INSERT INTO accounts (public_id, account_type, owner_ref, currency)
+                        VALUES (?, ?, ?, ?)""")
+                .params(publicId, accountType, "owner-" + publicId, currency)
                 .update();
         return publicId;
     }

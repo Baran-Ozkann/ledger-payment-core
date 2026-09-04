@@ -33,15 +33,15 @@ abstract class SchemaTestSupport extends AbstractIntegrationTest {
     }
 
     long insertAccount() {
-        return insertAccount("ASSET", TRY, 0L, false);
+        return insertAccount("ASSET", TRY, 0L);
     }
 
-    long insertAccount(String accountType, String currency, long balance, boolean allowNegative) {
+    long insertAccount(String accountType, String currency, long balance) {
         return jdbc.sql("""
-                        INSERT INTO accounts (public_id, account_type, currency, balance, allow_negative)
-                        VALUES (?, ?, ?, ?, ?)
+                        INSERT INTO accounts (public_id, account_type, currency, balance)
+                        VALUES (?, ?, ?, ?)
                         RETURNING id""")
-                .params(UUID.randomUUID(), accountType, currency, balance, allowNegative)
+                .params(UUID.randomUUID(), accountType, currency, balance)
                 .query(Long.class)
                 .single();
     }

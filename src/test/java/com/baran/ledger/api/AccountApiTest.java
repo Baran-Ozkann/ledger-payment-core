@@ -15,7 +15,7 @@ class AccountApiTest extends ApiTestSupport {
 
     @Test
     void accountIsCreatedEmptyAndCanBeFetched() {
-        UUID account = createAccount("LIABILITY", false);
+        UUID account = createAccount("LIABILITY");
 
         ApiResponse response = get("/v1/accounts/" + account);
 
@@ -28,6 +28,24 @@ class AccountApiTest extends ApiTestSupport {
     }
 
     @Test
+    void allowNegativeIsDerivedFromAccountType() {
+        ApiResponse equity = get("/v1/accounts/" + createAccount("EQUITY"));
+
+        assertThat(equity.body().get("allow_negative")).isEqualTo(true);
+    }
+
+    /** The field was removed from the request; sending it anyway must not reach the column. */
+    @Test
+    void allowNegativeInTheRequestBodyIsIgnored() {
+        ApiResponse created = post("/v1/accounts", """
+                {"account_type": "LIABILITY", "owner_ref": "owner-%s", "allow_negative": true}"""
+                .formatted(UUID.randomUUID()));
+
+        assertThat(created.status()).isEqualTo(HttpStatus.CREATED);
+        assertThat(created.body().get("allow_negative")).isEqualTo(false);
+    }
+
+    @Test
     void unknownAccountReturnsNotFound() {
         ApiResponse response = get("/v1/accounts/" + UUID.randomUUID());
 
@@ -37,7 +55,7 @@ class AccountApiTest extends ApiTestSupport {
 
     @Test
     void pageSizeOutOfRangeRejected() {
-        UUID account = createAccount("LIABILITY", false);
+        UUID account = createAccount("LIABILITY");
 
         ApiResponse response = get("/v1/accounts/" + account + "/entries?limit=0");
 

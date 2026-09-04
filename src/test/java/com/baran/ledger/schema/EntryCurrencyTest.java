@@ -10,7 +10,7 @@ class EntryCurrencyTest extends SchemaTestSupport {
 
     @Test
     void mismatchedCurrencyRejected() {
-        long accountId = insertAccount("ASSET", TRY, 0L, false);
+        long accountId = insertAccount("ASSET", TRY, 0L);
         long transactionId = insertTransaction();
 
         assertThatThrownBy(() -> insertEntry(transactionId, accountId, 1_000L, "USD"))

@@ -64,6 +64,7 @@ V7 is the same class of hole. Entries of -1000 TRY and +1000 USD sum to zero and
 - Any operation touching two accounts locks them in **ascending internal `id` order**. No exceptions.
 - Insufficient-funds checks live in the `WHERE` clause of a conditional `UPDATE`, never in an application-level `if`.
 - No optimistic-locking `version` column. Pessimistic ordered locking plus conditional UPDATE is the concurrency strategy; a version column alongside it is dead weight and misleads reviewers.
+- `allow_negative` is a generated column derived from `account_type`; only EQUITY may go negative. It is not a request field, and the application never writes it — the database refuses a supplied value.
 
 ### Client identity
 - `client_id` comes from the `X-Client-Id` request header. It is **not authenticated** — authentication is out of scope. It exists solely to scope idempotency keys.

@@ -57,10 +57,10 @@ class LedgerInvariantPropertiesTest {
         ledger = context.getBean(LedgerService.class);
         jdbc = context.getBean(JdbcClient.class);
 
-        Account equity = ledger.createAccount(AccountType.EQUITY, "ledger-equity", true);
+        Account equity = ledger.createAccount(AccountType.EQUITY, "ledger-equity");
         accounts = new ArrayList<>();
         for (int i = 0; i < ACCOUNT_COUNT; i++) {
-            Account account = ledger.createAccount(AccountType.LIABILITY, "owner-" + i, false);
+            Account account = ledger.createAccount(AccountType.LIABILITY, "owner-" + i);
             ledger.fund(equity.publicId(), account.publicId(), Money.of(OPENING_BALANCE), "opening balance");
             accounts.add(account.publicId());
         }

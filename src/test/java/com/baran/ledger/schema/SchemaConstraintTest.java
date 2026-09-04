@@ -3,6 +3,7 @@ package com.baran.ledger.schema;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
 
@@ -14,7 +15,7 @@ class SchemaConstraintTest extends SchemaTestSupport {
 
     @Test
     void negativeBalanceRejected() {
-        long accountId = insertAccount("ASSET", TRY, 500L, false);
+        long accountId = insertAccount("ASSET", TRY, 500L);
 
         assertThatThrownBy(() -> debit(accountId, 600L))
                 .isInstanceOf(DataIntegrityViolationException.class)
@@ -25,11 +26,35 @@ class SchemaConstraintTest extends SchemaTestSupport {
 
     @Test
     void negativeBalanceAllowedOnEquityAccount() {
-        long accountId = insertAccount("EQUITY", TRY, 0L, true);
+        long accountId = insertAccount("EQUITY", TRY, 0L);
 
         debit(accountId, 600L);
 
         assertThat(balanceOf(accountId)).isEqualTo(-600L);
+    }
+
+    /**
+     * I4 is only as strong as the column it reads. While allow_negative was settable, a LIABILITY
+     * account could be created with it set to true and then overdrawn without breaking anything.
+     */
+    @Test
+    void allowNegativeCannotBeSet() {
+        assertThatThrownBy(() -> jdbc.sql("""
+                                INSERT INTO accounts (public_id, account_type, currency, allow_negative)
+                                VALUES (?, 'LIABILITY', ?, TRUE)""")
+                .params(UUID.randomUUID(), TRY)
+                .update())
+                .isInstanceOf(DataAccessException.class)
+                .hasStackTraceContaining("generated column");
+    }
+
+    @Test
+    void allowNegativeFollowsAccountType() {
+        long liability = insertAccount("LIABILITY", TRY, 0L);
+        long equity = insertAccount("EQUITY", TRY, 0L);
+
+        assertThat(allowNegativeOf(liability)).isFalse();
+        assertThat(allowNegativeOf(equity)).isTrue();
     }
 
     @Test
@@ -66,6 +91,13 @@ class SchemaConstraintTest extends SchemaTestSupport {
         jdbc.sql("UPDATE accounts SET balance = balance - ? WHERE id = ?")
                 .params(amount, accountId)
                 .update();
+    }
+
+    private boolean allowNegativeOf(long accountId) {
+        return jdbc.sql("SELECT allow_negative FROM accounts WHERE id = ?")
+                .param(accountId)
+                .query(Boolean.class)
+                .single();
     }
 
     private long balanceOf(long accountId) {

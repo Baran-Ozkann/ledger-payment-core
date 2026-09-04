@@ -10,7 +10,6 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 import com.baran.ledger.domain.LedgerEntry;
-import com.baran.ledger.domain.Money;
 
 @Repository
 public class EntryRepository {
@@ -29,11 +28,16 @@ public class EntryRepository {
         this.jdbc = jdbc;
     }
 
-    public void insert(long transactionId, long accountId, long amount) {
+    /**
+     * The currency is the one on the account being posted to, never a constant: a constant would
+     * silently disagree with the account the moment two currencies exist, and the entry is the
+     * record of what was actually moved.
+     */
+    public void insert(long transactionId, long accountId, long amount, String currency) {
         jdbc.sql("""
                         INSERT INTO ledger_entries (transaction_id, account_id, amount, currency)
                         VALUES (?, ?, ?, ?)""")
-                .params(transactionId, accountId, amount, Money.CURRENCY)
+                .params(transactionId, accountId, amount, currency)
                 .update();
     }
 

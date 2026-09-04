@@ -6,6 +6,7 @@ public enum LedgerError {
     INVALID_AMOUNT("invalid_amount", "Amount must be strictly positive"),
     AMOUNT_TOO_LARGE("amount_too_large", "Amount exceeds the maximum of " + Money.MAX_AMOUNT),
     SELF_TRANSFER("self_transfer", "Source and destination accounts must differ"),
+    CURRENCY_MISMATCH("currency_mismatch", "Source and destination accounts must share a currency"),
     INSUFFICIENT_FUNDS("insufficient_funds", "Source account has insufficient funds"),
     INVALID_FUNDING_ACCOUNTS("invalid_funding_accounts", "Funding moves EQUITY to LIABILITY"),
     ACCOUNT_NOT_FOUND("account_not_found", "No such account"),

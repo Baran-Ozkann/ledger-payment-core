@@ -72,9 +72,10 @@ public class LedgerService {
     }
 
     /**
-     * V1 to V3 are checked before anything is read or written, because none of them is covered by
-     * an invariant: a negative amount inverts the transfer and creates money while every
-     * database-level defense still passes.
+     * V1 to V3 are checked before anything is read or written, and V7 as soon as both accounts are
+     * known, because none of them is covered by an invariant. A negative amount inverts the
+     * transfer, and a cross-currency pair balances to zero with each entry matching its own
+     * account; both create money while every database-level defense still passes.
      */
     private LedgerTransaction post(TxType txType, UUID fromAccount, UUID toAccount, Money amount, String description) {
         if (!amount.isPositive()) {
@@ -89,6 +90,9 @@ public class LedgerService {
 
         Account source = account(fromAccount);
         Account destination = account(toAccount);
+        if (!source.currency().equals(destination.currency())) {
+            throw new LedgerException(LedgerError.CURRENCY_MISMATCH);
+        }
         if (txType == TxType.FUNDING && !isFundingPair(source, destination)) {
             throw new LedgerException(LedgerError.INVALID_FUNDING_ACCOUNTS);
         }
@@ -96,8 +100,8 @@ public class LedgerService {
         UUID publicId = UUID.randomUUID();
         long transactionId = transactions.insert(publicId, txType, description);
         moveBalances(source, destination, amount);
-        entries.insert(transactionId, source.id(), amount.negated().minorUnits());
-        entries.insert(transactionId, destination.id(), amount.minorUnits());
+        entries.insert(transactionId, source.id(), amount.negated().minorUnits(), source.currency());
+        entries.insert(transactionId, destination.id(), amount.minorUnits(), destination.currency());
         return transaction(publicId);
     }
 

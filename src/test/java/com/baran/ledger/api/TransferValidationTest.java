@@ -74,6 +74,28 @@ class TransferValidationTest extends ApiTestSupport {
         assertThat(balanceOf(account)).isEqualTo(1_000L);
     }
 
+    /**
+     * V7. Every invariant holds on a cross-currency transfer: the two entries sum to zero and each
+     * one matches the currency of its own account, so I1, I2 and I7 all pass while 1000 kurus
+     * leave one account and 1000 cents arrive in another. Nothing but this rule stops it.
+     */
+    @Test
+    void crossCurrencyTransferRejected() {
+        UUID source = fundedAccount(1_000L);
+        UUID destination = foreignCurrencyAccount("USD", false);
+        long transactionsBefore = transactionCount();
+        long entriesBefore = entryCount();
+
+        ApiResponse response = post("/v1/transfers", transferBody(source, destination, 100L));
+
+        assertThat(response.status()).isEqualTo(HttpStatus.UNPROCESSABLE_CONTENT);
+        assertThat(response.problemType()).isEqualTo("urn:ledger:currency_mismatch");
+        assertThat(transactionCount()).isEqualTo(transactionsBefore);
+        assertThat(entryCount()).isEqualTo(entriesBefore);
+        assertThat(balanceOf(source)).isEqualTo(1_000L);
+        assertThat(balanceOf(destination)).isZero();
+    }
+
     @Test
     void decimalAmountRejected() {
         UUID source = fundedAccount(1_000L);

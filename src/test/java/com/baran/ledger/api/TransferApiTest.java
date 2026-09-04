@@ -76,11 +76,30 @@ class TransferApiTest extends ApiTestSupport {
     }
 
     @Test
+    void entriesCarryTheCurrencyOfTheirAccount() {
+        UUID source = foreignCurrencyAccount("USD", true);
+        UUID destination = foreignCurrencyAccount("USD", false);
+
+        ApiResponse response = post("/v1/transfers", transferBody(source, destination, 500L));
+
+        // Writing a constant TRY here would be refused by the I7 trigger on a USD account.
+        assertThat(response.status()).isEqualTo(HttpStatus.CREATED);
+        assertThat(currenciesOf(response)).containsOnly("USD");
+    }
+
+    @Test
     void unknownTransferReturnsNotFound() {
         ApiResponse response = get("/v1/transfers/" + UUID.randomUUID());
 
         assertThat(response.status()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(response.problemType()).isEqualTo("urn:ledger:transaction_not_found");
+    }
+
+    private static List<String> currenciesOf(ApiResponse response) {
+        List<?> entries = (List<?>) response.body().get("entries");
+        return entries.stream()
+                .map(entry -> (String) ((Map<?, ?>) entry).get("currency"))
+                .toList();
     }
 
     private static List<Long> amountsOf(ApiResponse response) {

@@ -91,6 +91,20 @@ abstract class ApiTestSupport extends AbstractIntegrationTest {
         return account;
     }
 
+    /**
+     * The ledger is single currency, so the API has no way to create anything but a TRY account.
+     * A foreign-currency account is inserted directly, which is the only way to reach V7 at all.
+     */
+    UUID foreignCurrencyAccount(String currency, boolean allowNegative) {
+        UUID publicId = UUID.randomUUID();
+        jdbc.sql("""
+                        INSERT INTO accounts (public_id, account_type, owner_ref, currency, allow_negative)
+                        VALUES (?, 'LIABILITY', ?, ?, ?)""")
+                .params(publicId, "owner-" + publicId, currency, allowNegative)
+                .update();
+        return publicId;
+    }
+
     long balanceOf(UUID accountPublicId) {
         return jdbc.sql("SELECT balance FROM accounts WHERE public_id = ?")
                 .param(accountPublicId)

@@ -42,8 +42,11 @@ The invariants above do **not** cover these. Each is a separate, explicitly test
 | V4 | Amount must be an integer; decimals are rejected at deserialization | `400` |
 | V5 | `X-Client-Id` header is required on all mutating endpoints | `400 missing_client_id` |
 | V6 | `Idempotency-Key` header is required on all mutating endpoints | `400 missing_idempotency_key` |
+| V7 | `from_account` and `to_account` must carry the same currency | `422 currency_mismatch` |
 
 **V1 is the most dangerous omission.** A negative amount inverts the transfer direction while bypassing the balance check on the receiving side. Every invariant still passes; money is created. There must be an explicit test named `negativeAmountRejected` and another named `selfTransferRejected`.
+
+V7 is the same class of hole. Entries of -1000 TRY and +1000 USD sum to zero and each matches its own account's currency, so I1, I2, I3 and I7 all pass while money is created. It must be checked before any balance moves, and there must be an explicit test named `crossCurrencyTransferRejected`.
 
 ---
 

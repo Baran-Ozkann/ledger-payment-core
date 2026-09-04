@@ -1,33 +1,37 @@
 # Progress
 
-**Current phase:** 1a — Schema and invariants
-**Branch:** phase-1a-schema
-**Last updated:** 2026-09-04 12:20
+**Current phase:** 1b — Domain, service, API
+**Branch:** phase-1b-service
+**Last updated:** 2026-09-04 12:45
 
 ## Done in this phase
-- [x] V2__ledger_core.sql: accounts, ledger_transactions, ledger_entries, the CHECK
-  constraints, the two entry indexes, and the partial unique index uq_single_reversal.
-  No version column — ec0107a
-- [x] V3__balanced_transaction_trigger.sql: I1 as a deferred CONSTRAINT TRIGGER — 7b4f2d3
-- [x] V4__immutability_triggers.sql: I5 on both ledger tables, RAISEs on UPDATE and
-  DELETE — 5a5febb
-- [x] V5__entry_currency_trigger.sql: I7 as a BEFORE INSERT trigger — 65943b1
-- [x] Twelve schema tests in src/test/java/com/baran/ledger/schema, none @Transactional.
-  Fifteen tests total with the phase 0 smoke tests; `./mvnw -B verify` green
-- [x] Break proof for I1, I5 and I7: each trigger dropped through a throwaway migration,
-  the corresponding test observed failing, the migration removed, the test observed
-  passing again. Outputs are in the phase 1a report
-- [x] Each of the four commits verified green on its own in a detached worktree
+- [x] Domain: Money (minor units in a long, exact arithmetic, MAX_AMOUNT), AccountType,
+  TxType, Account, LedgerTransaction, LedgerEntry, LedgerError, LedgerException — 55665f6
+- [x] Store: AccountRepository, TransactionRepository, EntryRepository over JdbcClient with
+  explicit SQL. Insufficient funds is the WHERE clause of the debit UPDATE — 35e2d55
+- [x] Service: LedgerService.transfer and .fund in a single @Transactional block, V1 to V3
+  checked before any read or write, both accounts touched in ascending internal id
+  order — 35e2d55
+- [x] API: POST/GET /v1/accounts, GET /v1/accounts/{id}/entries with cursor pagination,
+  POST/GET /v1/transfers, POST /v1/funding, RFC 7807 problem details, X-Client-Id
+  required on mutating endpoints, Jackson refusing decimal amounts — 8b57034
+- [x] Property tests: I2 and I3, 1000 tries each, jqwik on its own database — 2b0c741
+- [x] `./mvnw -B verify` green: 39 tests, 54 s. ci/check-rules.sh exits 0
+- [x] Exit criterion checked by hand: account created, funded and transferred from over
+  curl against the Compose PostgreSQL; V1, V3, V4 and V5 rejections observed there too
 
 ## In progress
 - Nothing; the phase deliverables are complete
 
 ## Blocked / open questions
-- PHASES.md exit criteria say "all eleven schema tests"; the list above it names twelve
-  test methods. All twelve are implemented. Raised in the report, not a blocker
-- The triggers were split into V3, V4 and V5 rather than living in V2. Raised in the
-  report under Deviations
+- Money has no `minus`: balance arithmetic lives in the SQL conditional UPDATE, so
+  subtractExact has no call site. Raised in the report rather than shipping an unused
+  method
+- POST /v1/funding is not in the phase's endpoint list, but the exit criterion requires
+  funding an account over curl. Raised in the report
+- V6 (Idempotency-Key required) is deliberately not implemented; phase 1b is defined as
+  "no idempotency yet" and phase 2 owns it
 
 ## Next step
-- Push phase-1a-schema; do not merge into main (merges are user-only). Wait for the
-  audit before phase 1b
+- Push phase-1b-service; do not merge into main (merges are user-only). Wait for the
+  audit before phase 2

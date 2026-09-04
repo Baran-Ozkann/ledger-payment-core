@@ -1,36 +1,33 @@
 # Progress
 
-**Current phase:** 0 — Skeleton
-**Branch:** phase-0-skeleton
-**Last updated:** 2026-09-04 11:35
+**Current phase:** 1a — Schema and invariants
+**Branch:** phase-1a-schema
+**Last updated:** 2026-09-04 12:20
 
 ## Done in this phase
-- [x] Maven project, Java 21, Spring Boot 4.1.1, package layout — 13c4115
-- [x] docker-compose.yml: PostgreSQL 16 and Kafka 4.3.1 in KRaft mode, both healthy — 402b6a1
-- [x] V1 baseline migration, AbstractIntegrationTest on Testcontainers, smoke test — b8e5c16
-- [x] ci/check-rules.sh, verified against a deliberate BigDecimal violation in domain — 949e4bb
-- [x] .github/workflows/ci.yml: rule guard, then `mvn -B verify` — f8799b2
-- [x] CI run green on GitHub Actions; actions pinned to checkout@v5 / setup-java@v5 — 1f41f5c
-- [x] Remediation: rule guard distinguishes grep exit 0/1/other instead of treating any
-  non-zero as clean; the AI-tool-reference check was dead until now — see report
-- [x] Remediation: container reuse disabled; Flyway assertion proves migration ran in
-  this run (`installed_on` after JVM start), not a leftover row
-- [x] Remediation: `container_name` removed from compose; host ports parameterized
-  (`POSTGRES_PORT`, `KAFKA_PORT`) so two stacks run side by side under distinct
-  `COMPOSE_PROJECT_NAME` values
-- [x] Remediation: Maven wrapper (`mvnw`, `mvnw.cmd`, `.mvn/wrapper/`) committed; CI and
-  README use `./mvnw`
-- [x] Cleanup: redundant `testcontainers-bom` import removed from pom.xml,
-  `PostgreSQLContainer` parameterized, PROGRESS.md sixth commit sha filled in
+- [x] V2__ledger_core.sql: accounts, ledger_transactions, ledger_entries, the CHECK
+  constraints, the two entry indexes, and the partial unique index uq_single_reversal.
+  No version column — ec0107a
+- [x] V3__balanced_transaction_trigger.sql: I1 as a deferred CONSTRAINT TRIGGER — 7b4f2d3
+- [x] V4__immutability_triggers.sql: I5 on both ledger tables, RAISEs on UPDATE and
+  DELETE — 5a5febb
+- [x] V5__entry_currency_trigger.sql: I7 as a BEFORE INSERT trigger — 65943b1
+- [x] Twelve schema tests in src/test/java/com/baran/ledger/schema, none @Transactional.
+  Fifteen tests total with the phase 0 smoke tests; `./mvnw -B verify` green
+- [x] Break proof for I1, I5 and I7: each trigger dropped through a throwaway migration,
+  the corresponding test observed failing, the migration removed, the test observed
+  passing again. Outputs are in the phase 1a report
+- [x] Each of the four commits verified green on its own in a detached worktree
 
 ## In progress
-- Nothing; phase deliverables and remediation are complete pending this session's commits
+- Nothing; the phase deliverables are complete
 
 ## Blocked / open questions
-- None. `spring-boot-testcontainers` and `spring-boot-flyway` were flagged in the prior
-  session; `CLAUDE.md` (merged in from `main`) now lists both as approved exceptions.
-  Not re-raised.
+- PHASES.md exit criteria say "all eleven schema tests"; the list above it names twelve
+  test methods. All twelve are implemented. Raised in the report, not a blocker
+- The triggers were split into V3, V4 and V5 rather than living in V2. Raised in the
+  report under Deviations
 
 ## Next step
-- Push `phase-0-skeleton`; do not merge into `main` (per current `CLAUDE.md`, merges are
-  user-only). Wait for the user to review and merge.
+- Push phase-1a-schema; do not merge into main (merges are user-only). Wait for the
+  audit before phase 1b

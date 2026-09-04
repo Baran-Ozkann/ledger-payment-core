@@ -8,6 +8,14 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    deserialization:
+      # V4: 1250.00 is not an integer number of kurus, so it is a bad request, not a rounding job.
+      accept-float-as-int: false
+  mvc:
+    problemdetails:
+      enabled: true
 
 management:
   endpoints:

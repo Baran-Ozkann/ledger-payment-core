@@ -13,7 +13,6 @@ import com.baran.ledger.domain.Account;
 import com.baran.ledger.domain.AccountType;
 import com.baran.ledger.domain.IdempotencyRecord;
 import com.baran.ledger.domain.IdempotencyRequest;
-import com.baran.ledger.domain.IdempotencyStatus;
 import com.baran.ledger.domain.LedgerEntry;
 import com.baran.ledger.domain.LedgerError;
 import com.baran.ledger.domain.LedgerException;
@@ -124,17 +123,16 @@ public class LedgerService {
     }
 
     /**
-     * Reached when the claim found the key already taken. The stored hash is what separates a
-     * retry of the same request from a second, different request wearing the same key.
+     * Reached when the claim found the key already taken. A row that is visible here is always a
+     * finished one: the claim commits with the ledger write, so an attempt that fails takes its own
+     * claim down with it. The stored hash is what separates a retry of the same request from a
+     * second, different request wearing the same key.
      */
     private IdempotentOutcome replayOf(IdempotencyRequest request) {
         IdempotencyRecord record = idempotency.find(request.clientId(), request.key())
                 .orElseThrow(() -> new IllegalStateException(
                         "the key was claimed by someone else but no row is visible: " + request.key()));
 
-        if (record.status() == IdempotencyStatus.IN_PROGRESS) {
-            throw new LedgerException(LedgerError.REQUEST_IN_PROGRESS);
-        }
         if (!record.requestHash().equals(request.requestHash())) {
             throw new LedgerException(LedgerError.IDEMPOTENCY_KEY_REUSE);
         }

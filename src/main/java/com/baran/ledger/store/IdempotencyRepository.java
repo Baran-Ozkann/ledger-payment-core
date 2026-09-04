@@ -9,7 +9,6 @@ import org.springframework.stereotype.Repository;
 
 import com.baran.ledger.domain.IdempotencyRecord;
 import com.baran.ledger.domain.IdempotencyRequest;
-import com.baran.ledger.domain.IdempotencyStatus;
 
 @Repository
 public class IdempotencyRepository {
@@ -30,8 +29,8 @@ public class IdempotencyRepository {
      */
     public Optional<Long> claim(IdempotencyRequest request) {
         return jdbc.sql("""
-                        INSERT INTO idempotency_keys (client_id, idem_key, request_hash, status, expires_at)
-                        VALUES (?, ?, ?, 'IN_PROGRESS', now() + INTERVAL '24 hours')
+                        INSERT INTO idempotency_keys (client_id, idem_key, request_hash, expires_at)
+                        VALUES (?, ?, ?, now() + INTERVAL '24 hours')
                         ON CONFLICT (client_id, idem_key) DO NOTHING
                         RETURNING id""")
                 .params(request.clientId(), request.key(), request.requestHash())
@@ -41,7 +40,7 @@ public class IdempotencyRepository {
 
     public Optional<IdempotencyRecord> find(String clientId, String key) {
         return jdbc.sql("""
-                        SELECT request_hash, response_code, status, response_body
+                        SELECT request_hash, response_code, response_body
                         FROM idempotency_keys
                         WHERE client_id = ? AND idem_key = ?""")
                 .params(clientId, key)
@@ -53,8 +52,7 @@ public class IdempotencyRepository {
     public void complete(long id, int responseCode, String responseBody, Long transactionId) {
         jdbc.sql("""
                         UPDATE idempotency_keys
-                        SET status = 'COMPLETED', response_code = ?, response_body = ?::jsonb,
-                            transaction_id = ?::bigint
+                        SET response_code = ?, response_body = ?::jsonb, transaction_id = ?::bigint
                         WHERE id = ?""")
                 .params(responseCode, responseBody, transactionId, id)
                 .update();
@@ -63,7 +61,6 @@ public class IdempotencyRepository {
     private static IdempotencyRecord mapRecord(ResultSet rs, int rowNum) throws SQLException {
         return new IdempotencyRecord(
                 rs.getString("request_hash"),
-                IdempotencyStatus.valueOf(rs.getString("status")),
                 rs.getInt("response_code"),
                 rs.getString("response_body"));
     }

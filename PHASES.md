@@ -345,14 +345,12 @@ CREATE TABLE idempotency_keys (
     client_id      TEXT        NOT NULL,
     idem_key       TEXT        NOT NULL,
     request_hash   TEXT        NOT NULL,
-    status         TEXT        NOT NULL,
     response_code  INT,
     response_body  JSONB,
     transaction_id BIGINT      REFERENCES ledger_transactions(id),
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at     TIMESTAMPTZ NOT NULL,
-    CONSTRAINT uq_client_key UNIQUE (client_id, idem_key),
-    CONSTRAINT valid_status CHECK (status IN ('IN_PROGRESS','COMPLETED'))
+    CONSTRAINT uq_client_key UNIQUE (client_id, idem_key)
 );
 CREATE INDEX idx_idem_expiry ON idempotency_keys(expires_at);
 ```
@@ -363,10 +361,11 @@ CREATE INDEX idx_idem_expiry ON idempotency_keys(expires_at);
 - Protocol:
   - `INSERT ... ON CONFLICT DO NOTHING RETURNING id`
   - Row returned → the key is ours, proceed
-  - No row + `COMPLETED` + same hash → return the stored response, with the status code it was
-    stored with. Two identical calls must report the same outcome
-  - No row + `COMPLETED` + different hash → `422 idempotency_key_reuse`
-  - No row + `IN_PROGRESS` → `409 request_in_progress`
+  - No row + same hash → return the stored response, with the status code it was stored with.
+    Two identical calls must report the same outcome
+  - No row + different hash → `422 idempotency_key_reuse`
+  - A visible row is always a finished one: the claim commits with the ledger write, so there is
+    no in-progress state for another request to see
 - Deterministic lock order: `SELECT ... FOR UPDATE` on accounts in ascending internal `id` order
 - Conditional balance UPDATE:
   ```sql

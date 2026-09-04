@@ -3,7 +3,6 @@ package com.baran.ledger.schema;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,21 +28,10 @@ class IdempotencyKeyTest extends SchemaTestSupport {
         assertThat(keyCount("key-2")).isEqualTo(2);
     }
 
-    @Test
-    void unknownStatusRejected() {
-        assertThatThrownBy(() -> jdbc.sql("""
-                                INSERT INTO idempotency_keys (client_id, idem_key, request_hash, status, expires_at)
-                                VALUES (?, ?, 'hash', 'DONE', now())""")
-                .params("client-c", UUID.randomUUID().toString())
-                .update())
-                .isInstanceOf(DataIntegrityViolationException.class)
-                .hasStackTraceContaining("valid_status");
-    }
-
     private void insertKey(String clientId, String key) {
         jdbc.sql("""
-                        INSERT INTO idempotency_keys (client_id, idem_key, request_hash, status, expires_at)
-                        VALUES (?, ?, 'hash', 'IN_PROGRESS', now() + INTERVAL '24 hours')""")
+                        INSERT INTO idempotency_keys (client_id, idem_key, request_hash, expires_at)
+                        VALUES (?, ?, 'hash', now() + INTERVAL '24 hours')""")
                 .params(clientId, key)
                 .update();
     }

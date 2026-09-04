@@ -2,14 +2,16 @@ package com.baran.ledger.api;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.baran.ledger.config.RequestHashFilter;
+import com.baran.ledger.domain.IdempotencyRequest;
 import com.baran.ledger.domain.LedgerTransaction;
 import com.baran.ledger.domain.Money;
 import com.baran.ledger.service.LedgerService;
@@ -31,13 +33,23 @@ class FundingController {
     }
 
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    TransferResponse fund(
+    ResponseEntity<String> fund(
             @RequestHeader(name = "X-Client-Id", required = false) String clientId,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestAttribute(RequestHashFilter.REQUEST_HASH) String requestHash,
             @RequestBody TransferRequest request) {
-        LOG.debug("Funding requested by client {}", ClientId.require(clientId));
-        LedgerTransaction transaction = ledger.fund(
-                request.fromAccount(), request.toAccount(), Money.of(request.amount()), request.description());
+        IdempotencyRequest idempotency = IdempotencyRequest.of(clientId, idempotencyKey, requestHash);
+        LOG.debug("Funding requested by client {}", idempotency.clientId());
+        return IdempotentResponse.of(ledger.fund(
+                idempotency,
+                request.fromAccount(),
+                request.toAccount(),
+                Money.of(request.amount()),
+                request.description(),
+                this::render));
+    }
+
+    private TransferResponse render(LedgerTransaction transaction) {
         return TransferResponse.of(transaction, ledger.entriesOfTransaction(transaction.publicId()));
     }
 }

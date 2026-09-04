@@ -1,13 +1,19 @@
 package com.baran.ledger.service;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 import com.baran.ledger.domain.Account;
 import com.baran.ledger.domain.AccountType;
+import com.baran.ledger.domain.IdempotencyRecord;
+import com.baran.ledger.domain.IdempotencyRequest;
+import com.baran.ledger.domain.IdempotencyStatus;
 import com.baran.ledger.domain.LedgerEntry;
 import com.baran.ledger.domain.LedgerError;
 import com.baran.ledger.domain.LedgerException;
@@ -16,6 +22,7 @@ import com.baran.ledger.domain.Money;
 import com.baran.ledger.domain.TxType;
 import com.baran.ledger.store.AccountRepository;
 import com.baran.ledger.store.EntryRepository;
+import com.baran.ledger.store.IdempotencyRepository;
 import com.baran.ledger.store.TransactionRepository;
 
 @Service
@@ -23,14 +30,28 @@ public class LedgerService {
 
     public static final int MAX_PAGE_SIZE = 200;
 
+    /** The code stored with a first execution. A replay of it answers 200, not this. */
+    private static final int CREATED = 201;
+
     private final AccountRepository accounts;
     private final TransactionRepository transactions;
     private final EntryRepository entries;
+    private final IdempotencyRepository idempotency;
+    private final ObjectMapper json;
 
-    LedgerService(AccountRepository accounts, TransactionRepository transactions, EntryRepository entries) {
+    LedgerService(AccountRepository accounts, TransactionRepository transactions, EntryRepository entries,
+                  IdempotencyRepository idempotency, ObjectMapper json) {
         this.accounts = accounts;
         this.transactions = transactions;
         this.entries = entries;
+        this.idempotency = idempotency;
+        this.json = json;
+    }
+
+    @Transactional
+    public IdempotentOutcome createAccount(
+            IdempotencyRequest request, AccountType accountType, String ownerRef, ResponseView<Account> view) {
+        return idempotently(request, () -> new Completion(view.render(createAccount(accountType, ownerRef)), null));
     }
 
     @Transactional
@@ -62,13 +83,62 @@ public class LedgerService {
     }
 
     @Transactional
+    public IdempotentOutcome transfer(
+            IdempotencyRequest request, UUID fromAccount, UUID toAccount, Money amount, String description,
+            ResponseView<LedgerTransaction> view) {
+        return idempotently(request, () -> completionOf(transfer(fromAccount, toAccount, amount, description), view));
+    }
+
+    @Transactional
     public LedgerTransaction transfer(UUID fromAccount, UUID toAccount, Money amount, String description) {
         return post(TxType.TRANSFER, fromAccount, toAccount, amount, description);
     }
 
     @Transactional
+    public IdempotentOutcome fund(
+            IdempotencyRequest request, UUID fromAccount, UUID toAccount, Money amount, String description,
+            ResponseView<LedgerTransaction> view) {
+        return idempotently(request, () -> completionOf(fund(fromAccount, toAccount, amount, description), view));
+    }
+
+    @Transactional
     public LedgerTransaction fund(UUID fromAccount, UUID toAccount, Money amount, String description) {
         return post(TxType.FUNDING, fromAccount, toAccount, amount, description);
+    }
+
+    /**
+     * The claim, the ledger write and the stored response commit together. A caller holding a
+     * response therefore knows the key is durably taken, and a rejection releases the key with the
+     * money it would have moved, so nothing is left half done for a retry to trip over.
+     */
+    private IdempotentOutcome idempotently(IdempotencyRequest request, Supplier<Completion> work) {
+        Optional<Long> claim = idempotency.claim(request);
+        if (claim.isEmpty()) {
+            return replayOf(request);
+        }
+
+        Completion completion = work.get();
+        String body = json.writeValueAsString(completion.view());
+        idempotency.complete(claim.get(), CREATED, body, completion.transactionId());
+        return IdempotentOutcome.created(body);
+    }
+
+    /**
+     * Reached when the claim found the key already taken. The stored hash is what separates a
+     * retry of the same request from a second, different request wearing the same key.
+     */
+    private IdempotentOutcome replayOf(IdempotencyRequest request) {
+        IdempotencyRecord record = idempotency.find(request.clientId(), request.key())
+                .orElseThrow(() -> new IllegalStateException(
+                        "the key was claimed by someone else but no row is visible: " + request.key()));
+
+        if (record.status() == IdempotencyStatus.IN_PROGRESS) {
+            throw new LedgerException(LedgerError.REQUEST_IN_PROGRESS);
+        }
+        if (!record.requestHash().equals(request.requestHash())) {
+            throw new LedgerException(LedgerError.IDEMPOTENCY_KEY_REUSE);
+        }
+        return IdempotentOutcome.replayed(record.responseBody());
     }
 
     /**
@@ -125,7 +195,15 @@ public class LedgerService {
         }
     }
 
+    private static Completion completionOf(LedgerTransaction transaction, ResponseView<LedgerTransaction> view) {
+        return new Completion(view.render(transaction), transaction.id());
+    }
+
     private static boolean isFundingPair(Account source, Account destination) {
         return source.accountType() == AccountType.EQUITY && destination.accountType() == AccountType.LIABILITY;
+    }
+
+    /** @param transactionId null for an operation that writes no ledger transaction */
+    private record Completion(Object view, Long transactionId) {
     }
 }

@@ -10,7 +10,7 @@ import com.baran.ledger.domain.Money;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * V1 to V5. None of these is covered by an invariant: a negative amount inverts the transfer and
+ * V1 to V7. None of these is covered by an invariant: a negative amount inverts the transfer and
  * creates money while every database-level defense still passes, so each rule is checked here and
  * each rejection is asserted to have written nothing at all.
  */
@@ -107,6 +107,19 @@ class TransferValidationTest extends ApiTestSupport {
                 .formatted(source, destination));
 
         assertThat(response.status()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(entryCount()).isEqualTo(entriesBefore);
+    }
+
+    @Test
+    void missingIdempotencyKeyRejected() {
+        UUID source = fundedAccount(1_000L);
+        UUID destination = fundedAccount(0L);
+        long entriesBefore = entryCount();
+
+        ApiResponse response = post("/v1/transfers", transferBody(source, destination, 100L), CLIENT_ID, null);
+
+        assertThat(response.status()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.problemType()).isEqualTo("urn:ledger:missing_idempotency_key");
         assertThat(entryCount()).isEqualTo(entriesBefore);
     }
 

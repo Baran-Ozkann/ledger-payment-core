@@ -4,17 +4,19 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.baran.ledger.config.RequestHashFilter;
+import com.baran.ledger.domain.IdempotencyRequest;
 import com.baran.ledger.service.LedgerService;
 
 @RestController
@@ -31,12 +33,15 @@ class AccountController {
     }
 
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    AccountResponse create(
+    ResponseEntity<String> create(
             @RequestHeader(name = "X-Client-Id", required = false) String clientId,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestAttribute(RequestHashFilter.REQUEST_HASH) String requestHash,
             @RequestBody CreateAccountRequest request) {
-        LOG.debug("Account creation requested by client {}", ClientId.require(clientId));
-        return AccountResponse.of(ledger.createAccount(request.accountType(), request.ownerRef()));
+        IdempotencyRequest idempotency = IdempotencyRequest.of(clientId, idempotencyKey, requestHash);
+        LOG.debug("Account creation requested by client {}", idempotency.clientId());
+        return IdempotentResponse.of(ledger.createAccount(
+                idempotency, request.accountType(), request.ownerRef(), AccountResponse::of));
     }
 
     @GetMapping("/{publicId}")

@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** Requests are written as raw JSON so the tests assert on the wire format, not on a DTO. */
 abstract class ApiTestSupport extends AbstractIntegrationTest {
 
-    static final String CLIENT_ID = "phase-1b-tests";
+    static final String CLIENT_ID = "phase-2-tests";
 
     private static final ParameterizedTypeReference<Map<String, Object>> JSON_OBJECT =
             new ParameterizedTypeReference<>() {
@@ -51,21 +51,29 @@ abstract class ApiTestSupport extends AbstractIntegrationTest {
         return exchange(http.get().uri(uri));
     }
 
+    /** A fresh key per call, so an ordinary request is never mistaken for a retry of an earlier one. */
     ApiResponse post(String uri, String json) {
-        return post(uri, json, CLIENT_ID);
+        return post(uri, json, CLIENT_ID, UUID.randomUUID().toString());
     }
 
     ApiResponse post(String uri, String json, String clientId) {
+        return post(uri, json, clientId, UUID.randomUUID().toString());
+    }
+
+    ApiResponse post(String uri, String json, String clientId, String idempotencyKey) {
         RestTestClient.RequestBodySpec request = http.post().uri(uri).contentType(MediaType.APPLICATION_JSON);
         if (clientId != null) {
             request = request.header("X-Client-Id", clientId);
+        }
+        if (idempotencyKey != null) {
+            request = request.header("Idempotency-Key", idempotencyKey);
         }
         return exchange(request.body(json));
     }
 
     static String transferBody(UUID fromAccount, UUID toAccount, long amount) {
         return """
-                {"from_account": "%s", "to_account": "%s", "amount": %d, "description": "phase 1b"}"""
+                {"from_account": "%s", "to_account": "%s", "amount": %d, "description": "phase 2"}"""
                 .formatted(fromAccount, toAccount, amount);
     }
 
@@ -114,6 +122,13 @@ abstract class ApiTestSupport extends AbstractIntegrationTest {
 
     long transactionCount() {
         return jdbc.sql("SELECT count(*) FROM ledger_transactions").query(Long.class).single();
+    }
+
+    /** Funding an account is a transaction too, so a test about transfers has to count only those. */
+    long transferCount() {
+        return jdbc.sql("SELECT count(*) FROM ledger_transactions WHERE tx_type = 'TRANSFER'")
+                .query(Long.class)
+                .single();
     }
 
     long entryCount() {

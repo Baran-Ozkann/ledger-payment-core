@@ -23,4 +23,4 @@ jobs:
         run: bash ci/check-rules.sh
 
       - name: Build and test
-        run: mvn -B verify
+        run: ./mvnw -B verify

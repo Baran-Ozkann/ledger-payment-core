@@ -1,11 +1,11 @@
 # Maven
 target/
 pom.xml.versionsBackup
-.mvn/wrapper/maven-wrapper.jar
 
 # Java
 *.class
 *.jar
+!/.mvn/wrapper/maven-wrapper.jar
 *.war
 hs_err_pid*
 replay_pid*

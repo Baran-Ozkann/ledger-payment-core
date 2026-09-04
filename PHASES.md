@@ -363,7 +363,8 @@ CREATE INDEX idx_idem_expiry ON idempotency_keys(expires_at);
 - Protocol:
   - `INSERT ... ON CONFLICT DO NOTHING RETURNING id`
   - Row returned → the key is ours, proceed
-  - No row + `COMPLETED` + same hash → return stored response, `200`
+  - No row + `COMPLETED` + same hash → return the stored response, with the status code it was
+    stored with. Two identical calls must report the same outcome
   - No row + `COMPLETED` + different hash → `422 idempotency_key_reuse`
   - No row + `IN_PROGRESS` → `409 request_in_progress`
 - Deterministic lock order: `SELECT ... FOR UPDATE` on accounts in ascending internal `id` order
@@ -379,7 +380,7 @@ CREATE INDEX idx_idem_expiry ON idempotency_keys(expires_at);
 
 | Test | Setup | Expected |
 |---|---|---|
-| `duplicateIdempotencyKey` | 100 threads, same key + same body | Exactly 1 `ledger_transaction`; one 201, rest 200 or 409 |
+| `duplicateIdempotencyKey` | 100 threads, same key + same body | Exactly 1 `ledger_transaction`; every response is the stored 201 |
 | `sameKeyDifferentBody` | Same key, different amount | 422 |
 | `sameKeyDifferentEndpoint` | Same key on transfer then reversal | 422, not a false idempotent hit |
 | `concurrentTransfersNoLostUpdate` | 200 concurrent A→B of 100 kuruş | A = start−20000, B = start+20000 |

@@ -27,9 +27,9 @@ class IdempotencyTest extends ConcurrencyTestSupport {
 
         List<ApiResponse> responses = inParallel(THREADS, thread -> post("/v1/transfers", body, CLIENT_ID, key));
 
-        assertThat(countOf(responses, HttpStatus.CREATED)).isEqualTo(1);
-        assertThat(responses).allSatisfy(response -> assertThat(response.status())
-                .isIn(HttpStatus.CREATED, HttpStatus.OK, HttpStatus.CONFLICT));
+        // Every caller is told what the one execution answered, so none of them can tell that it
+        // was not their own request that did the work.
+        assertThat(countOf(responses, HttpStatus.CREATED)).isEqualTo(THREADS);
         // The money moved once, no matter how many callers asked for it.
         assertThat(transferCount()).isEqualTo(1);
         assertThat(balanceOf(source)).isEqualTo(1_000_000L - 100L);
@@ -91,10 +91,31 @@ class IdempotencyTest extends ConcurrencyTestSupport {
                         .formatted(destination, source), CLIENT_ID, key);
 
         assertThat(first.status()).isEqualTo(HttpStatus.CREATED);
-        assertThat(second.status()).isEqualTo(HttpStatus.OK);
-        assertThat(second.body().get("id")).isEqualTo(first.body().get("id"));
+        assertThat(second.status()).isEqualTo(HttpStatus.CREATED);
+        assertThat(second.body()).isEqualTo(first.body());
         assertThat(transferCount()).isEqualTo(1);
         assertThat(balanceOf(source)).isEqualTo(900L);
+    }
+
+    /**
+     * A repeat is answered with the code the first attempt produced, not with a 200 meaning "you
+     * already did this". Two identical calls that report different outcomes would have a client
+     * believing something different happened the second time.
+     */
+    @Test
+    void replayedCreateReturnsTheStoredResponse() {
+        String key = UUID.randomUUID().toString();
+        String body = """
+                {"account_type": "LIABILITY", "owner_ref": "owner-%s"}""".formatted(UUID.randomUUID());
+
+        ApiResponse created = post("/v1/accounts", body, CLIENT_ID, key);
+        ApiResponse replayed = post("/v1/accounts", body, CLIENT_ID, key);
+
+        assertThat(created.status()).isEqualTo(HttpStatus.CREATED);
+        assertThat(replayed.status()).isEqualTo(HttpStatus.CREATED);
+        // Byte for byte the stored response: a second account would carry a different id.
+        assertThat(replayed.body()).isEqualTo(created.body());
+        assertThat(accountCount()).isEqualTo(1);
     }
 
     /** A key belongs to one client, so another client's identical request is not a replay. */

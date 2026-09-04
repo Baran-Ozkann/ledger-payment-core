@@ -1,16 +1,9 @@
 package com.baran.ledger.service;
 
 /**
- * @param replayed whether this response was read back from a key someone already completed, which
- *                 is the difference between 201 and 200 at the edge
+ * @param status the code the request answers with: the one its first execution produced, whether
+ *               that execution was this call or an earlier one wearing the same key. Identical
+ *               calls get identical answers, so a repeat is not mistaken for a different outcome
  */
-public record IdempotentOutcome(boolean replayed, String body) {
-
-    static IdempotentOutcome created(String body) {
-        return new IdempotentOutcome(false, body);
-    }
-
-    static IdempotentOutcome replayed(String body) {
-        return new IdempotentOutcome(true, body);
-    }
+public record IdempotentOutcome(int status, String body) {
 }

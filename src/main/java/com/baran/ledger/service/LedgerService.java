@@ -30,7 +30,7 @@ public class LedgerService {
 
     public static final int MAX_PAGE_SIZE = 200;
 
-    /** The code stored with a first execution. A replay of it answers 200, not this. */
+    /** The code a first execution answers with, stored so that a repeat of it answers the same. */
     private static final int CREATED = 201;
 
     private final AccountRepository accounts;
@@ -120,7 +120,7 @@ public class LedgerService {
         Completion completion = work.get();
         String body = json.writeValueAsString(completion.view());
         idempotency.complete(claim.get(), CREATED, body, completion.transactionId());
-        return IdempotentOutcome.created(body);
+        return new IdempotentOutcome(CREATED, body);
     }
 
     /**
@@ -138,7 +138,7 @@ public class LedgerService {
         if (!record.requestHash().equals(request.requestHash())) {
             throw new LedgerException(LedgerError.IDEMPOTENCY_KEY_REUSE);
         }
-        return IdempotentOutcome.replayed(record.responseBody());
+        return new IdempotentOutcome(record.responseCode(), record.responseBody());
     }
 
     /**

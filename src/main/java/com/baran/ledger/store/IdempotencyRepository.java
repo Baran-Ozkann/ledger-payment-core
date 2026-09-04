@@ -41,7 +41,7 @@ public class IdempotencyRepository {
 
     public Optional<IdempotencyRecord> find(String clientId, String key) {
         return jdbc.sql("""
-                        SELECT request_hash, status, response_body
+                        SELECT request_hash, response_code, status, response_body
                         FROM idempotency_keys
                         WHERE client_id = ? AND idem_key = ?""")
                 .params(clientId, key)
@@ -64,6 +64,7 @@ public class IdempotencyRepository {
         return new IdempotencyRecord(
                 rs.getString("request_hash"),
                 IdempotencyStatus.valueOf(rs.getString("status")),
+                rs.getInt("response_code"),
                 rs.getString("response_body"));
     }
 }

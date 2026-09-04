@@ -120,6 +120,10 @@ abstract class ApiTestSupport extends AbstractIntegrationTest {
                 .single();
     }
 
+    long accountCount() {
+        return jdbc.sql("SELECT count(*) FROM accounts").query(Long.class).single();
+    }
+
     long transactionCount() {
         return jdbc.sql("SELECT count(*) FROM ledger_transactions").query(Long.class).single();
     }

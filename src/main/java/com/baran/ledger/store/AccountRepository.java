@@ -44,6 +44,17 @@ public class AccountRepository {
     }
 
     /**
+     * Takes the row lock and nothing else. Callers lock every account they are about to touch in
+     * ascending id order, so a pair of opposing transfers queues instead of deadlocking.
+     */
+    public void lock(long accountId) {
+        jdbc.sql("SELECT id FROM accounts WHERE id = ? FOR UPDATE")
+                .param(accountId)
+                .query(Long.class)
+                .single();
+    }
+
+    /**
      * The insufficient-funds test is the WHERE clause, not an if in the caller: the row is only
      * debited if it can afford it, and the affected-row count is how the caller learns the answer.
      */

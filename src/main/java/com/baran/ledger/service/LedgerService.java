@@ -167,26 +167,25 @@ public class LedgerService {
             throw new LedgerException(LedgerError.INVALID_FUNDING_ACCOUNTS);
         }
 
+        lockInIdOrder(source, destination);
+
         UUID publicId = UUID.randomUUID();
         long transactionId = transactions.insert(publicId, txType, description);
-        moveBalances(source, destination, amount);
+        debit(source, amount);
+        accounts.credit(destination.id(), amount.minorUnits());
         entries.insert(transactionId, source.id(), amount.negated().minorUnits(), source.currency());
         entries.insert(transactionId, destination.id(), amount.minorUnits(), destination.currency());
         return transaction(publicId);
     }
 
     /**
-     * Both rows are touched in ascending internal id order. The two UPDATEs take row locks, so
-     * with a fixed order a pair of opposing transfers can deadlock instead of queueing.
+     * Both rows are locked before either is written, in ascending internal id order. Ordering by id
+     * rather than by role is the whole point: two opposing transfers between the same pair ask for
+     * the same two locks in the same sequence, so one waits instead of the two deadlocking.
      */
-    private void moveBalances(Account source, Account destination, Money amount) {
-        if (source.id() < destination.id()) {
-            debit(source, amount);
-            accounts.credit(destination.id(), amount.minorUnits());
-        } else {
-            accounts.credit(destination.id(), amount.minorUnits());
-            debit(source, amount);
-        }
+    private void lockInIdOrder(Account source, Account destination) {
+        accounts.lock(Math.min(source.id(), destination.id()));
+        accounts.lock(Math.max(source.id(), destination.id()));
     }
 
     private void debit(Account source, Money amount) {

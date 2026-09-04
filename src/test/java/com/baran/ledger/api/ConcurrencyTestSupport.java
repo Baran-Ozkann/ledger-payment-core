@@ -15,9 +15,9 @@ import org.springframework.http.HttpStatusCode;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Nothing here is @Transactional. A test transaction would roll back the very writes the threads
- * are racing over, so each test empties the tables instead. TRUNCATE, not DELETE: I5 forbids
- * deleting a ledger row, and a row-level trigger does not fire on a truncate.
+ * No test transaction anywhere in here: one would roll back the very writes the threads are racing
+ * over, and hide the concurrency being measured. Each test empties the tables instead. TRUNCATE
+ * rather than DELETE, because I5 forbids deleting a ledger row and a row trigger skips a truncate.
  */
 abstract class ConcurrencyTestSupport extends ApiTestSupport {
 

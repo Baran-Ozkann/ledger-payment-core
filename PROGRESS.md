@@ -2,7 +2,7 @@
 
 **Current phase:** 1b — Domain, service, API
 **Branch:** phase-1b-service
-**Last updated:** 2026-09-04 18:40
+**Last updated:** 2026-09-04 18:55
 
 ## Done in this phase
 - [x] Domain: Money (minor units in a long, exact arithmetic, MAX_AMOUNT), AccountType,
@@ -32,7 +32,12 @@
 - [x] `allow_negative` is now a generated column, `GENERATED ALWAYS AS (account_type = 'EQUITY')`,
   and is gone from the create-account request. PostgreSQL 16 cannot convert a column in place, so
   V6 drops and re-adds it — c1cf61d
-- [x] `./mvnw -B verify` green: 45 tests, 1 m 01 s. ci/check-rules.sh exits 0
+- [x] I8: all entries of a transaction share one currency, a DEFERRABLE INITIALLY DEFERRED
+  constraint trigger like I1. This is the database-level defense for the hole V7 refuses at
+  the API. Break proof done: without the trigger the TRY/USD pair commits, I1 and I7 silent.
+  The test asserts the raised message, since I1 would mask an absent I8 on an unbalanced
+  cross-currency set — d42da24
+- [x] `./mvnw -B verify` green: 47 tests, 58 s. ci/check-rules.sh exits 0
 
 ## In progress
 - Nothing; the phase deliverables are complete
@@ -45,8 +50,8 @@
   funding an account over curl. Raised in the report
 - V6 (Idempotency-Key required) is deliberately not implemented; phase 1b is defined as
   "no idempotency yet" and phase 2 owns it
-- V7 is enforced in the service only, like V1 to V3. Whether a transaction whose entries span
-  two currencies should also be refused by a trigger is a question for the user; not guessed at
+- Answered: a transaction spanning two currencies is now refused by a trigger as well (I8).
+  V7 stays, so the request is a clean 422 rather than an exception at commit
 - PHASES.md still prints the phase-1a `accounts` table with a settable `allow_negative`. The
   plan document was left as written; V6 is the change of record
 

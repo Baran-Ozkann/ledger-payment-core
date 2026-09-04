@@ -5,11 +5,27 @@ violation=0
 
 deny() {
   local desc="$1"; shift
-  if grep -rn "$@" >/dev/null 2>&1; then
-    echo "RULE VIOLATION: $desc"
-    grep -rn "$@" | head -20
-    violation=1
-  fi
+  local out status
+  out=$(grep -rn "$@" 2>&1)
+  status=$?
+  case $status in
+    0)
+      echo "RULE VIOLATION: $desc"
+      echo "$out" | head -20
+      violation=1
+      ;;
+    1)
+      : # no match, clean
+      ;;
+    *)
+      # grep could not complete the search - most often a path in the list does
+      # not exist. It exits 2 EVEN WHEN IT FOUND MATCHES, so treating a non-zero
+      # status as "clean" would silently disable the check. Fail loudly instead.
+      echo "GUARD ERROR: could not run check '$desc' (grep exit $status)"
+      echo "$out" | head -5
+      violation=1
+      ;;
+  esac
 }
 
 deny "floating point or BigDecimal in domain/service" \

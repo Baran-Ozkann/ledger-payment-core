@@ -28,8 +28,8 @@
 
 ## Blocked / open questions
 - None. `spring-boot-testcontainers` and `spring-boot-flyway` were flagged in the prior
-  session; the remediation brief marks both as approved exceptions, confirmed load-bearing
-  by isolated removal. Not re-raised.
+  session; `CLAUDE.md` (merged in from `main`) now lists both as approved exceptions.
+  Not re-raised.
 
 ## Next step
 - Push `phase-0-skeleton`; do not merge into `main` (per current `CLAUDE.md`, merges are

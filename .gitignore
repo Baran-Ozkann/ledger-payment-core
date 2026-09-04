@@ -27,3 +27,6 @@ Thumbs.db
 
 # Local runtime
 *.log
+
+# jqwik failure persistence
+.jqwik-database

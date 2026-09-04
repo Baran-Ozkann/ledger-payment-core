@@ -17,6 +17,7 @@ import com.baran.ledger.AbstractIntegrationTest;
 abstract class SchemaTestSupport extends AbstractIntegrationTest {
 
     static final String TRY = "TRY";
+    static final String USD = "USD";
 
     @Autowired
     JdbcClient jdbc;

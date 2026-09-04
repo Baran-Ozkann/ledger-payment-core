@@ -580,7 +580,7 @@ Someone who has never seen the project can read the README, run it in 10 minutes
 **README.md:**
 - One paragraph: what this is, why it exists
 - Architecture diagram (Mermaid, versioned as text)
-- The seven invariants and six validation rules, each with how it is enforced
+- The eight invariants and seven validation rules, each with how it is enforced
 - Quick start: `docker compose up` → a single `curl` transfer
 - API reference
 - Test strategy: which test proves which invariant, plus the break-proof method
@@ -624,9 +624,9 @@ Someone who has never seen the project can read the README, run it in 10 minutes
 
 ## Definition of done
 
-- [ ] Each of the seven invariants is protected by at least one automated test
-- [ ] Each of the six validation rules is protected by at least one automated test
-- [ ] Break proofs recorded for I1, I5, I7, lock ordering, idempotency, and consumer dedup
+- [ ] Each of the eight invariants is protected by at least one automated test
+- [ ] Each of the seven validation rules is protected by at least one automated test
+- [ ] Break proofs recorded for I1, I5, I7, I8, lock ordering, idempotency, and consumer dedup
 - [ ] `duplicateIdempotencyKey` passes with 100 threads
 - [ ] `bidirectionalNoDeadlock` shows zero deadlocks across 5 consecutive runs
 - [ ] Property tests verify global balance across ≥1000 random sequences

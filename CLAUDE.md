@@ -12,7 +12,7 @@ Single currency: TRY. All amounts are carried as minor units (kuruş) in `long`.
 
 ---
 
-## The Seven Invariants
+## The Eight Invariants
 
 These are the reason the system exists. Every change must demonstrate it preserves them.
 
@@ -25,6 +25,7 @@ These are the reason the system exists. Every change must demonstrate it preserv
 | I5 | Entries are immutable (append-only) | Trigger that RAISEs + DB role grants |
 | I6 | A (client_id, idempotency_key) pair maps to at most one transaction | UNIQUE constraint |
 | I7 | An entry's currency matches its account's currency | BEFORE INSERT trigger |
+| I8 | All entries of a transaction share a single currency | Deferred constraint trigger |
 
 Enforcing an invariant "in the application layer" is **forbidden**. Every invariant must have a database-level defense.
 
@@ -46,7 +47,7 @@ The invariants above do **not** cover these. Each is a separate, explicitly test
 
 **V1 is the most dangerous omission.** A negative amount inverts the transfer direction while bypassing the balance check on the receiving side. Every invariant still passes; money is created. There must be an explicit test named `negativeAmountRejected` and another named `selfTransferRejected`.
 
-V7 is the same class of hole. Entries of -1000 TRY and +1000 USD sum to zero and each matches its own account's currency, so I1, I2, I3 and I7 all pass while money is created. It must be checked before any balance moves, and there must be an explicit test named `crossCurrencyTransferRejected`.
+V7 is the same class of hole. Entries of -1000 TRY and +1000 USD sum to zero and each matches its own account's currency, so I1, I2, I3 and I7 all pass while money is created. I8 is the database-level defense against it; V7 exists so the request is refused with a clean 422 before any balance moves, rather than blowing up at commit. There must be an explicit test named `crossCurrencyTransferRejected`.
 
 ---
 

@@ -4,6 +4,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.sql.Timestamp;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,12 +28,14 @@ class SmokeTest extends AbstractIntegrationTest {
 
     @Test
     void flywayAppliedTheBaselineMigration() {
-        Integer applied = jdbcClient
-                .sql("SELECT count(*) FROM flyway_schema_history WHERE version = '1' AND success")
-                .query(Integer.class)
+        // A row existing proves nothing on a reused container - it could be left over from an
+        // earlier run. Asserting installed_on is after this JVM started proves Flyway ran now.
+        Timestamp installedOn = jdbcClient
+                .sql("SELECT installed_on FROM flyway_schema_history WHERE version = '1' AND success")
+                .query(Timestamp.class)
                 .single();
 
-        assertThat(applied).isEqualTo(1);
+        assertThat(installedOn.toInstant()).isAfter(JVM_START);
     }
 
     @Test

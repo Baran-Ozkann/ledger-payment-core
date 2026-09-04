@@ -1,60 +1,42 @@
 # Progress
 
-**Current phase:** 1b — Domain, service, API
-**Branch:** phase-1b-service
-**Last updated:** 2026-09-04 18:55
+**Current phase:** 2 — Idempotency and concurrency
+**Branch:** phase-2-concurrency (branched from phase-1b-service, which is not merged yet)
+**Last updated:** 2026-09-04 19:35
 
 ## Done in this phase
-- [x] Domain: Money (minor units in a long, exact arithmetic, MAX_AMOUNT), AccountType,
-  TxType, Account, LedgerTransaction, LedgerEntry, LedgerError, LedgerException — 55665f6
-- [x] Store: AccountRepository, TransactionRepository, EntryRepository over JdbcClient with
-  explicit SQL. Insufficient funds is the WHERE clause of the debit UPDATE — 35e2d55
-- [x] Service: LedgerService.transfer and .fund in a single @Transactional block, V1 to V3
-  checked before any read or write, both accounts touched in ascending internal id
-  order — 35e2d55
-- [x] API: POST/GET /v1/accounts, GET /v1/accounts/{id}/entries with cursor pagination,
-  POST/GET /v1/transfers, POST /v1/funding, RFC 7807 problem details, X-Client-Id
-  required on mutating endpoints, Jackson refusing decimal amounts — 8b57034
-- [x] Property tests: I2 and I3, 1000 tries each, jqwik on its own database — 2b0c741
-- [x] `./mvnw -B verify` green: 39 tests, 54 s. ci/check-rules.sh exits 0
-- [x] Exit criterion checked by hand: account created, funded and transferred from over
-  curl against the Compose PostgreSQL; V1, V3, V4 and V5 rejections observed there too
-
-## Corrections applied after the phase (requested before phase 2)
-- [x] V7: a transfer's accounts must share a currency, rejected with 422 currency_mismatch
-  before any balance moves. Entries of -1000 TRY and +1000 USD sum to zero and each match
-  their own account, so I1, I2, I3 and I7 all pass while money is created — fb7908d
-- [x] `crossCurrencyTransferRejected` asserts the 422, both balances unchanged and no rows
-  written. Break proof done: with the check deleted the same request returns 201 CREATED — fb7908d
-- [x] Confirmed and fixed: `EntryRepository.insert` takes the currency from the account being
-  posted to. It used the `Money.CURRENCY` constant, which happened to agree only because every
-  account is TRY. `entriesCarryTheCurrencyOfTheirAccount` posts between two USD accounts — fb7908d
-- [x] `allow_negative` is now a generated column, `GENERATED ALWAYS AS (account_type = 'EQUITY')`,
-  and is gone from the create-account request. PostgreSQL 16 cannot convert a column in place, so
-  V6 drops and re-adds it — c1cf61d
-- [x] I8: all entries of a transaction share one currency, a DEFERRABLE INITIALLY DEFERRED
-  constraint trigger like I1. This is the database-level defense for the hole V7 refuses at
-  the API. Break proof done: without the trigger the TRY/USD pair commits, I1 and I7 silent.
-  The test asserts the raised message, since I1 would mask an absent I8 on an unbalanced
-  cross-currency set — d42da24
-- [x] `./mvnw -B verify` green: 47 tests, 58 s. ci/check-rules.sh exits 0
+- [x] `V8__idempotency.sql`: idempotency_keys with uq_client_key UNIQUE (client_id, idem_key) and
+  the valid_status CHECK. The plan calls it V3; V3 to V7 were taken, so it is V8
+- [x] Store: `IdempotencyRepository.claim` is INSERT ... ON CONFLICT DO NOTHING RETURNING id, which
+  yields an empty Optional rather than raising. `complete` runs in the same transaction as the
+  ledger write. Schema test covers the constraint itself, not the protocol over it
+- [x] `RequestHashFilter` reads the body once, hashes SHA-256 over method + path + canonicalized
+  body, and hands it on as a request attribute. Object keys sorted, arrays left alone
+- [x] Protocol in `LedgerService.idempotently`: claim wins → execute and store the response; claim
+  lost → 200 with the stored body, 422 idempotency_key_reuse on a different hash, 409 on IN_PROGRESS
+- [x] `Idempotency-Key` and `X-Client-Id` required on all three mutating endpoints (V5, V6).
+  `ClientId` was folded into `IdempotencyRequest.of`, which checks both
+- [x] Ordered locking: `SELECT ... FOR UPDATE` on both accounts in ascending internal id order
+  before either row is written. Insufficient funds is still the WHERE clause of the debit UPDATE
+- [x] Seven concurrency tests, none @Transactional, all released by one CountDownLatch
+- [x] Break proof 1: fixed from-then-to locking → 87 of 100 transfers died on deadlock detected
+- [x] Break proof 2: no ON CONFLICT and no unique constraint → 100 transactions instead of 1
+- [x] `bidirectionalNoDeadlock` run 5 consecutive times: zero deadlocks, all green
+- [x] `./mvnw -B verify` green: 60 tests, 1 m 10 s. ci/check-rules.sh exits 0
 
 ## In progress
 - Nothing; the phase deliverables are complete
 
 ## Blocked / open questions
-- Money has no `minus`: balance arithmetic lives in the SQL conditional UPDATE, so
-  subtractExact has no call site. Raised in the report rather than shipping an unused
-  method
-- POST /v1/funding is not in the phase's endpoint list, but the exit criterion requires
-  funding an account over curl. Raised in the report
-- V6 (Idempotency-Key required) is deliberately not implemented; phase 1b is defined as
-  "no idempotency yet" and phase 2 owns it
-- Answered: a transaction spanning two currencies is now refused by a trigger as well (I8).
-  V7 stays, so the request is a clean 422 rather than an exception at commit
-- PHASES.md still prints the phase-1a `accounts` table with a settable `allow_negative`. The
-  plan document was left as written; V6 is the change of record
+- `response_code` is written and never read: a replay answers 200 as the phase specifies, so the
+  stored 201 has no reader. Drop the column, or replay with the stored code?
+- `transaction_id` on idempotency_keys is written and never read. Phase 4 reversal may want it
+- The IN_PROGRESS branch (409) is unreachable while the claim commits with the ledger write: a
+  concurrent duplicate blocks on the unique index and then sees COMPLETED. Keep it as specified,
+  commit the claim separately for a fast 409, or delete the branch?
+- Nothing reads `expires_at`; the sweeper is in docs/future.md and the 24 hour window is a guess
+- `sameKeyDifferentEndpoint` uses transfer then funding, because reversal belongs to phase 4. It
+  tests the same property: the path is part of the hash
 
 ## Next step
-- Push phase-1b-service; do not merge into main (merges are user-only). Wait for the
-  audit before phase 2
+- Push phase-2-concurrency; do not merge into main (merges are user-only). Wait for the audit

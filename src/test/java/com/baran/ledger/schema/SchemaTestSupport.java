@@ -2,8 +2,11 @@ package com.baran.ledger.schema;
 
 import java.util.UUID;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.baran.ledger.AbstractIntegrationTest;
 
@@ -17,6 +20,17 @@ abstract class SchemaTestSupport extends AbstractIntegrationTest {
 
     @Autowired
     JdbcClient jdbc;
+
+    @Autowired
+    PlatformTransactionManager transactionManager;
+
+    /** The unit of commit under test: the deferred balance check runs when this template commits. */
+    TransactionTemplate inTransaction;
+
+    @BeforeEach
+    void prepareTransactionTemplate() {
+        inTransaction = new TransactionTemplate(transactionManager);
+    }
 
     long insertAccount() {
         return insertAccount("ASSET", TRY, 0L, false);
@@ -40,6 +54,18 @@ abstract class SchemaTestSupport extends AbstractIntegrationTest {
                 .param(UUID.randomUUID())
                 .query(Long.class)
                 .single();
+    }
+
+    /** Commits a two-entry transfer and returns its id. */
+    long commitBalancedTransaction(long amount) {
+        long source = insertAccount();
+        long destination = insertAccount();
+        return inTransaction.execute(status -> {
+            long transactionId = insertTransaction();
+            insertEntry(transactionId, source, -amount, TRY);
+            insertEntry(transactionId, destination, amount, TRY);
+            return transactionId;
+        });
     }
 
     void insertEntry(long transactionId, long accountId, long amount, String currency) {

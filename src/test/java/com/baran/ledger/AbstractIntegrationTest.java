@@ -13,7 +13,13 @@ import org.testcontainers.containers.PostgreSQLContainer;
  * run rather than this one. Verified failure mode: with reuse on, the suite passed even with
  * Flyway entirely disabled, because a prior run's flyway_schema_history was still present.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
+        // No broker in these tests, so neither half of the relay path is started. Left running,
+        // both would spend the suite retrying a connection to a host that is not listening.
+        "ledger.outbox.relay.enabled=false",
+        "spring.kafka.listener.auto-startup=false",
+        "spring.kafka.admin.auto-create=false"
+})
 public abstract class AbstractIntegrationTest {
 
     /** Captured before the container starts, so any Flyway row from this run must be after it. */

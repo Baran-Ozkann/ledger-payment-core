@@ -16,6 +16,23 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        # A retry inside the producer must not become a second copy on the broker. The only
+        # duplication the consumer is asked to absorb is the relay republishing what it could
+        # not mark, which is a duplicate the consumer can recognise by event id.
+        enable.idempotence: true
+
+ledger:
+  outbox:
+    relay:
+      enabled: true
+      interval-ms: 200
 
 management:
   endpoints:

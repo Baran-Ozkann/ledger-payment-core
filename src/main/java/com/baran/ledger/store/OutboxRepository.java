@@ -63,6 +63,24 @@ public class OutboxRepository {
                 .single();
     }
 
+    /**
+     * published_at, never created_at: a row with a NULL marker has not been sent yet, however old
+     * it is, and NULL fails this comparison rather than matching it. Bounded by the same subselect
+     * trick as the key cleanup, because DELETE takes no LIMIT.
+     *
+     * @return rows deleted, which the caller uses to decide whether another batch is due
+     */
+    public int deletePublishedBefore(int days, int limit) {
+        return jdbc.sql("""
+                        DELETE FROM outbox_events
+                        WHERE id IN (
+                            SELECT id FROM outbox_events
+                            WHERE published_at < now() - make_interval(days => ?)
+                            LIMIT ?)""")
+                .params(days, limit)
+                .update();
+    }
+
     private static OutboxEvent mapEvent(ResultSet rs, int rowNum) throws SQLException {
         return new OutboxEvent(
                 rs.getLong("id"),

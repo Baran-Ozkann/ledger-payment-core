@@ -20,11 +20,15 @@
   a quiet pass over a ledger that agrees. The I2 alarm branch is unreachable by design - the
   deferred trigger refuses an unbalanced transaction - so only its quiet path is exercised
 
+- [x] `IdempotencyKeyCleanupJob` and `OutboxArchivalJob`: daily, batched at 10 000 rows, each batch
+  committing on its own so the loop never holds every lock it took. Both count rows into
+  `ledger_cleanup_rows_deleted_total{job}`. The archival filters on `published_at`, never
+  `created_at`, and `unpublishedOutboxEventsNeverArchived` is the test that says so
+
 ## In progress
 - Nothing
 
 ## Next up in this phase
-- Retention jobs for idempotency keys and published outbox rows
 - Transfer, idempotency, deadlock and outbox metrics; Prometheus endpoint
 - Tracing through the outbox and Kafka
 - Prometheus, Grafana and Tempo in compose; dashboard JSON under ops/grafana/

@@ -58,6 +58,20 @@ public class IdempotencyRepository {
                 .update();
     }
 
+    /**
+     * The subselect is what bounds the statement: DELETE has no LIMIT of its own, and an unbounded
+     * one would lock every expired row at once on a table the request path inserts into.
+     *
+     * @return rows deleted, which the caller uses to decide whether another batch is due
+     */
+    public int deleteExpired(int limit) {
+        return jdbc.sql("""
+                        DELETE FROM idempotency_keys
+                        WHERE id IN (SELECT id FROM idempotency_keys WHERE expires_at < now() LIMIT ?)""")
+                .param(limit)
+                .update();
+    }
+
     private static IdempotencyRecord mapRecord(ResultSet rs, int rowNum) throws SQLException {
         return new IdempotencyRecord(
                 rs.getString("request_hash"),

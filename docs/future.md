@@ -41,3 +41,44 @@ argument, and it should survive into ADR-005 as written.
 
 Ordered locking is proven by test, not observed in production. Phase 4 owns metrics; the deadlock
 counter belongs there and is expected to stay at zero.
+
+## ADR-003 material: SKIP LOCKED, and the ordering it gives up
+
+The relay takes its batch with `ORDER BY id ... FOR UPDATE SKIP LOCKED`. What that buys is that a
+second relay instance would step over a batch another one already holds instead of queueing behind
+it, and that a relay which dies mid-batch blocks nobody: its locks go with its transaction and the
+rows are picked up on the next tick.
+
+What it gives up is global ordering. Two relays would publish overlapping id ranges concurrently,
+so an event with a lower id can reach the broker after one with a higher id. Even one relay gives
+up ordering across the topic, because three partitions are read independently.
+
+What survives is ordering per account, and it survives for two reasons that both have to hold:
+
+- **A single relay instance.** One publisher, sending in `ORDER BY id` and waiting for each send,
+  means the broker sees one account's events in the order they were written.
+- **The partition key is the aggregate id.** All events of one account take one partition, and a
+  partition is ordered. This is why the event is per entry rather than per transaction: a
+  transaction has two accounts and no single key.
+
+Per-account ordering is the guarantee worth having; a consumer building an account's history needs
+its events in order and does not care where another account's events sit relative to them. A
+horizontally scaled relay is out of scope for this project, and it is the thing that would break
+the first of those two reasons. Anyone lifting that restriction has to shard the relay by
+`hashtext(aggregate_id)` so that one account is only ever published by one instance.
+
+**Rejected: a high-water-mark cursor** (`WHERE id > last_seen`), which needs no locking and no
+`published_at` write at all. It is unsound. A `BIGSERIAL` value is handed out before the
+transaction commits, so a row with a lower id can become visible after a row with a higher id has
+been read and the cursor has moved past it. That event is then never published, and nothing in the
+system ever notices: there is no marker left to find it by. The `published_at IS NULL` marker
+cannot be outrun, which is why it is worth its index and its second write.
+
+## Consumed event retention — after Phase 4
+
+`consumed_events` grows by one row per event per consumer group and nothing prunes it. Phase 4 adds
+retention for `idempotency_keys` and `outbox_events`, and this table belongs in the same
+conversation, but it cannot use the same rule: deleting a row means the next redelivery of that
+event is applied a second time. It can only be pruned past the point where redelivery is
+impossible, which is the broker's own retention window, so the two settings have to be decided
+together rather than a day being picked for it.

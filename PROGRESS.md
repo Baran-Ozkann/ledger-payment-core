@@ -1,47 +1,51 @@
 # Progress
 
-**Current phase:** 2 — Idempotency and concurrency
-**Branch:** phase-2-concurrency (branched from phase-1b-service, which is not merged yet)
-**Last updated:** 2026-09-04 20:20
+**Current phase:** 3 — Outbox and event publishing
+**Branch:** phase-3-outbox (branched from main, which now carries phases 0 to 2)
+**Last updated:** 2026-09-05
 
 ## Done in this phase
-- [x] `V8__idempotency.sql`: idempotency_keys with uq_client_key UNIQUE (client_id, idem_key). The
-  plan calls it V3; V3 to V7 were taken, so it is V8. Its status column is gone again in V9
-- [x] Store: `IdempotencyRepository.claim` is INSERT ... ON CONFLICT DO NOTHING RETURNING id, which
-  yields an empty Optional rather than raising. `complete` runs in the same transaction as the
-  ledger write. Schema test covers the constraint itself, not the protocol over it
-- [x] `RequestHashFilter` reads the body once, hashes SHA-256 over method + path + canonicalized
-  body, and hands it on as a request attribute. Object keys sorted, arrays left alone
-- [x] Protocol in `LedgerService.idempotently`: claim wins → execute and store the response; claim
-  lost → 200 with the stored body, 422 idempotency_key_reuse on a different hash, 409 on IN_PROGRESS
-- [x] `Idempotency-Key` and `X-Client-Id` required on all three mutating endpoints (V5, V6).
-  `ClientId` was folded into `IdempotencyRequest.of`, which checks both
-- [x] Ordered locking: `SELECT ... FOR UPDATE` on both accounts in ascending internal id order
-  before either row is written. Insufficient funds is still the WHERE clause of the debit UPDATE
-- [x] Seven concurrency tests, none @Transactional, all released by one CountDownLatch
-- [x] Break proof 1: fixed from-then-to locking → 87 of 100 transfers died on deadlock detected
-- [x] Break proof 2: no ON CONFLICT and no unique constraint → 100 transactions instead of 1
-- [x] `bidirectionalNoDeadlock` run 5 consecutive times: zero deadlocks, all green
-- [x] `./mvnw -B verify` green: 60 tests, 1 m 10 s. ci/check-rules.sh exits 0
+- [x] `V10__outbox.sql`: `outbox_events` with a partial index on unpublished rows, `consumed_events`
+  keyed by (consumer_group, event_id), and `account_activity` as the read model. The plan calls the
+  migration V4; V4 to V9 are taken, so it is V10
+- [x] The transfer transaction writes one outbox row per entry, keyed by the account's public id.
+  Per entry rather than per transaction, because the account is the aggregate and the aggregate id
+  has to be the partition key for per-account ordering to mean anything
+- [x] `OutboxRelay`: scheduled every 200 ms, its own transaction, `ORDER BY id ... FOR UPDATE SKIP
+  LOCKED` in batches of 100. Each event is sent, waited on, then marked. A failure records the
+  error against the row and stops the batch rather than reordering past it
+- [x] Producer `acks=all`, `enable.idempotence=true`, key = aggregate id. Topic declared with three
+  partitions, so the ordering the key buys is not an accident of having nowhere else to go
+- [x] `AccountActivityProjection`: the `consumed_events` insert and the projection write are one
+  transaction; ack mode RECORD, so the offset moves only after that transaction commits
+- [x] Six tests: `outboxWrittenAtomically`, `outboxNotWrittenOnRollback`, `relayPublishesAndMarks`,
+  `relayRetriesUnpublished`, `consumerReplayIdempotent`, `perAccountOrdering`
+- [x] Break proof: dedup insert removed → `consumerReplayIdempotent` fails with net 2400 instead of
+  1500, the repeat applied twice. Restored → green
+- [x] Kafka tests tagged `@Tag("kafka")` and split into their own CI job with a surefire group
+  filter. A plain `./mvnw -B verify` still runs everything
+- [x] `./mvnw -B verify` green: 66 tests. Non-Kafka job 2 m 15 s, Kafka job 28 s. check-rules.sh
+  exits 0
 
-## Corrections after the phase 2 review
-- [x] A replay returns the stored `response_code`, not a hardcoded 200: two identical calls report
-  the same outcome. `replayedCreateReturnsTheStoredResponse` asserts a repeated create answers 201
-  with the byte-identical stored body — f3ea6be
-- [x] `transaction_id` stays. Phase 4 reversal needs to know which transaction a key produced
-- [x] `status`, `IN_PROGRESS` and the 409 branch deleted, column and CHECK dropped in `V9`. A
-  visible row is always a finished one. The trade behind that is written up in docs/future.md as
-  material for ADR-005
-- [x] The key TTL stays at 24 hours; the sweeper lands in phase 4
+## Decisions worth remembering
+- `relayRetriesUnpublished` reserves an id from the sequence, publishes later rows, and only then
+  inserts the reserved id. A cursor-based relay would have moved past it; the NULL marker cannot be
+  outrun. That is the pitfall the test exists for, written up in docs/future.md for ADR-003
+- `consumerReplayIdempotent` produces the repeat by putting `published_at` back to NULL, which is
+  what a crash between the send and the mark leaves behind, and fences it with a second transfer on
+  the same key so that "the repeat was handled" is observable rather than assumed
+- The event type is not on the wire. It is a column, read into the relay's failure log; one topic
+  carries one event type in this phase, and an unread header would be structure nothing reads
 
 ## In progress
 - Nothing; the phase deliverables are complete
 
 ## Blocked / open questions
-- All four phase 2 questions are answered and applied; nothing is open
-- `transaction_id` is written and stays unread until phase 4 reversal uses it. Deliberate
-- `sameKeyDifferentEndpoint` uses transfer then funding, because reversal belongs to phase 4. It
-  tests the same property: the path is part of the hash
+- `spring-boot-kafka` was added beyond the approved dependency list. It is the Boot 4 module split
+  that made `spring-boot-flyway` necessary, and Phase 3 cannot use Kafka without it. Flagged in the
+  report for approval after the fact
+- CI durations are from local runs of the two exact CI commands. GitHub Actions has not run this
+  branch yet
 
 ## Next step
-- Push phase-2-concurrency; do not merge into main (merges are user-only). Wait for the audit
+- Push phase-3-outbox; do not merge into main (merges are user-only). Wait for the audit

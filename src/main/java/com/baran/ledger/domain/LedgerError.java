@@ -14,6 +14,7 @@ public enum LedgerError {
     MISSING_CLIENT_ID("missing_client_id", "The X-Client-Id header is required"),
     MISSING_IDEMPOTENCY_KEY("missing_idempotency_key", "The Idempotency-Key header is required"),
     IDEMPOTENCY_KEY_REUSE("idempotency_key_reuse", "This key was used for a different request"),
+    TRANSACTION_ALREADY_REVERSED("transaction_already_reversed", "This transaction has already been reversed"),
     INVALID_PAGE_SIZE("invalid_page_size", "Page size is out of range");
 
     private final String code;

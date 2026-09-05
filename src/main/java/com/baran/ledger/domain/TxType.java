@@ -6,5 +6,6 @@ package com.baran.ledger.domain;
  */
 public enum TxType {
     TRANSFER,
-    FUNDING
+    FUNDING,
+    REVERSAL
 }

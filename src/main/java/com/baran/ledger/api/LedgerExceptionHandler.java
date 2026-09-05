@@ -30,6 +30,7 @@ class LedgerExceptionHandler {
                  IDEMPOTENCY_KEY_REUSE -> HttpStatus.UNPROCESSABLE_CONTENT;
             case MISSING_CLIENT_ID, MISSING_IDEMPOTENCY_KEY, INVALID_PAGE_SIZE -> HttpStatus.BAD_REQUEST;
             case ACCOUNT_NOT_FOUND, TRANSACTION_NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case TRANSACTION_ALREADY_REVERSED -> HttpStatus.CONFLICT;
         };
     }
 }

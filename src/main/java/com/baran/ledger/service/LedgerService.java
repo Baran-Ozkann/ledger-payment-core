@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
@@ -12,6 +13,7 @@ import tools.jackson.databind.ObjectMapper;
 import com.baran.ledger.domain.Account;
 import com.baran.ledger.domain.AccountActivityEvent;
 import com.baran.ledger.domain.AccountType;
+import com.baran.ledger.domain.EntryPosting;
 import com.baran.ledger.domain.IdempotencyRecord;
 import com.baran.ledger.domain.IdempotencyRequest;
 import com.baran.ledger.domain.LedgerEntry;
@@ -109,6 +111,42 @@ public class LedgerService {
         return post(TxType.FUNDING, fromAccount, toAccount, amount, description);
     }
 
+    @Transactional
+    public IdempotentOutcome reverse(
+            IdempotencyRequest request, UUID transactionPublicId, ResponseView<LedgerTransaction> view) {
+        return idempotently(request, () -> completionOf(reverse(transactionPublicId), view));
+    }
+
+    /**
+     * A reversal is a new transaction carrying the original's entries with their signs flipped.
+     * The original is never touched: I5 forbids it, and a correction that edits history destroys
+     * the evidence of what actually happened.
+     *
+     * <p>It can be refused. Giving money back to an account whose counterpart has since spent it
+     * would drive that counterpart negative, so the flipped entries go through the same conditional
+     * UPDATE an ordinary debit does. A reversal is not privileged over I4.
+     */
+    @Transactional
+    public LedgerTransaction reverse(UUID transactionPublicId) {
+        LedgerTransaction original = transaction(transactionPublicId);
+        List<EntryPosting> postings = entries.postingsOf(original.id());
+
+        lockInIdOrder(postings.stream().map(EntryPosting::accountId).toList());
+
+        UUID publicId = UUID.randomUUID();
+        long reversalId = insertReversal(publicId, original);
+        for (EntryPosting posting : postings) {
+            long flipped = Math.negateExact(posting.amount());
+            applyToBalance(posting.accountId(), flipped);
+            entries.insert(reversalId, posting.accountId(), flipped, posting.currency());
+        }
+
+        LedgerTransaction reversal = transaction(publicId);
+        postings.forEach(posting -> announce(
+                reversal, posting.accountPublicId(), Math.negateExact(posting.amount()), posting.currency()));
+        return reversal;
+    }
+
     /**
      * The claim, the ledger write and the stored response commit together. A caller holding a
      * response therefore knows the key is durably taken, and a rejection releases the key with the
@@ -169,18 +207,18 @@ public class LedgerService {
             throw new LedgerException(LedgerError.INVALID_FUNDING_ACCOUNTS);
         }
 
-        lockInIdOrder(source, destination);
+        lockInIdOrder(List.of(source.id(), destination.id()));
 
         UUID publicId = UUID.randomUUID();
         long transactionId = transactions.insert(publicId, txType, description);
-        debit(source, amount);
+        debit(source.id(), amount.minorUnits());
         accounts.credit(destination.id(), amount.minorUnits());
         entries.insert(transactionId, source.id(), amount.negated().minorUnits(), source.currency());
         entries.insert(transactionId, destination.id(), amount.minorUnits(), destination.currency());
 
         LedgerTransaction transaction = transaction(publicId);
-        announce(transaction, source, amount.negated());
-        announce(transaction, destination, amount);
+        announce(transaction, source.publicId(), amount.negated().minorUnits(), source.currency());
+        announce(transaction, destination.publicId(), amount.minorUnits(), destination.currency());
         return transaction;
     }
 
@@ -192,29 +230,44 @@ public class LedgerService {
      * <p>One event per entry, keyed by the account: the account is the aggregate a consumer cares
      * about, and it is what the partition key has to be for per-account ordering to mean anything.
      */
-    private void announce(LedgerTransaction transaction, Account account, Money amount) {
+    private void announce(LedgerTransaction transaction, UUID accountPublicId, long amount, String currency) {
         AccountActivityEvent event = new AccountActivityEvent(
-                transaction.publicId(), account.publicId(), amount.minorUnits(),
-                account.currency(), transaction.txType());
+                transaction.publicId(), accountPublicId, amount, currency, transaction.txType());
         outbox.append(
                 AccountActivityEvent.AGGREGATE_TYPE,
-                account.publicId().toString(),
+                accountPublicId.toString(),
                 AccountActivityEvent.EVENT_TYPE,
                 json.writeValueAsString(event));
     }
 
     /**
-     * Both rows are locked before either is written, in ascending internal id order. Ordering by id
-     * rather than by role is the whole point: two opposing transfers between the same pair ask for
-     * the same two locks in the same sequence, so one waits instead of the two deadlocking.
+     * Every row is locked before any of them is written, in ascending internal id order. Ordering
+     * by id rather than by role is the whole point: two opposing transfers between the same pair
+     * ask for the same locks in the same sequence, so one waits instead of the two deadlocking.
+     * A reversal takes the same route for the same reason.
      */
-    private void lockInIdOrder(Account source, Account destination) {
-        accounts.lock(Math.min(source.id(), destination.id()));
-        accounts.lock(Math.max(source.id(), destination.id()));
+    private void lockInIdOrder(List<Long> accountIds) {
+        accountIds.stream().sorted().forEach(accounts::lock);
     }
 
-    private void debit(Account source, Money amount) {
-        if (accounts.debit(source.id(), amount.minorUnits()) == 0) {
+    private long insertReversal(UUID publicId, LedgerTransaction original) {
+        try {
+            return transactions.insertReversal(publicId, original.id(), "Reversal of " + original.publicId());
+        } catch (DuplicateKeyException alreadyReversed) {
+            throw new LedgerException(LedgerError.TRANSACTION_ALREADY_REVERSED);
+        }
+    }
+
+    private void applyToBalance(long accountId, long amount) {
+        if (amount < 0L) {
+            debit(accountId, Math.negateExact(amount));
+        } else {
+            accounts.credit(accountId, amount);
+        }
+    }
+
+    private void debit(long accountId, long amount) {
+        if (accounts.debit(accountId, amount) == 0) {
             throw new LedgerException(LedgerError.INSUFFICIENT_FUNDS);
         }
     }

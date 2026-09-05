@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
+import com.baran.ledger.domain.EntryPosting;
 import com.baran.ledger.domain.LedgerEntry;
 
 @Repository
@@ -62,6 +63,31 @@ public class EntryRepository {
                         .params(accountId, after, limit)
                         .query(EntryRepository::mapEntry)
                         .list();
+    }
+
+    /**
+     * The internal account id, which the responses above deliberately do not carry. A reversal
+     * needs it: it locks by it and updates balances by it, and a public id would mean another
+     * lookup per entry to get back to the row it already has.
+     */
+    public List<EntryPosting> postingsOf(long transactionId) {
+        return jdbc.sql("""
+                        SELECT e.account_id, a.public_id AS account_public_id, e.amount, e.currency
+                        FROM ledger_entries e
+                        JOIN accounts a ON a.id = e.account_id
+                        WHERE e.transaction_id = ?
+                        ORDER BY e.id""")
+                .param(transactionId)
+                .query(EntryRepository::mapPosting)
+                .list();
+    }
+
+    private static EntryPosting mapPosting(ResultSet rs, int rowNum) throws SQLException {
+        return new EntryPosting(
+                rs.getLong("account_id"),
+                rs.getObject("account_public_id", UUID.class),
+                rs.getLong("amount"),
+                rs.getString("currency"));
     }
 
     private static LedgerEntry mapEntry(ResultSet rs, int rowNum) throws SQLException {

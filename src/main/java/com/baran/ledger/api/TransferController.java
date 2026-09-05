@@ -49,6 +49,22 @@ class TransferController {
                 this::render));
     }
 
+    /**
+     * A reversal takes no body: the transaction being reversed is the path, and there is nothing
+     * else to decide. The path is part of the request hash, so the same key aimed at a different
+     * transaction is a reuse rather than a replay.
+     */
+    @PostMapping("/{publicId}/reversals")
+    ResponseEntity<String> reverse(
+            @RequestHeader(name = "X-Client-Id", required = false) String clientId,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestAttribute(RequestHashFilter.REQUEST_HASH) String requestHash,
+            @PathVariable UUID publicId) {
+        IdempotencyRequest idempotency = IdempotencyRequest.of(clientId, idempotencyKey, requestHash);
+        LOG.debug("Reversal of {} requested by client {}", publicId, idempotency.clientId());
+        return IdempotentResponse.of(ledger.reverse(idempotency, publicId, this::render));
+    }
+
     @GetMapping("/{publicId}")
     TransferResponse get(@PathVariable UUID publicId) {
         return TransferResponse.of(ledger.transaction(publicId), ledger.entriesOfTransaction(publicId));

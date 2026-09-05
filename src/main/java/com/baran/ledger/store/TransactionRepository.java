@@ -31,6 +31,21 @@ public class TransactionRepository {
                 .single();
     }
 
+    /**
+     * uq_single_reversal is a unique index on reverses_id, so the second reversal of one
+     * transaction fails here. An application-level check could not do this: two requests would
+     * both read "not reversed yet" and both write.
+     */
+    public long insertReversal(UUID publicId, long reversesId, String description) {
+        return jdbc.sql("""
+                        INSERT INTO ledger_transactions (public_id, tx_type, reverses_id, description)
+                        VALUES (?, ?, ?, ?)
+                        RETURNING id""")
+                .params(publicId, TxType.REVERSAL.name(), reversesId, description)
+                .query(Long.class)
+                .single();
+    }
+
     public Optional<LedgerTransaction> findByPublicId(UUID publicId) {
         return jdbc.sql("""
                         SELECT id, public_id, tx_type, description, created_at

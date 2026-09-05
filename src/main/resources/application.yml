@@ -27,6 +27,17 @@ spring:
         # duplication the consumer is asked to absorb is the relay republishing what it could
         # not mark, which is a duplicate the consumer can recognise by event id.
         enable.idempotence: true
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      # A new group reads the topic from the beginning: the projection is derived, so the only
+      # way it can be right is by seeing every event there has ever been.
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      # The offset moves only after the listener method has returned, which is after the dedup row
+      # and the projection write have committed together. Committing earlier would lose the event.
+      ack-mode: record
 
 ledger:
   outbox:

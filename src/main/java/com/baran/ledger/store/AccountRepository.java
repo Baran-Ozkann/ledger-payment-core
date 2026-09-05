@@ -3,6 +3,7 @@ package com.baran.ledger.store;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Repository;
 
 import com.baran.ledger.domain.Account;
 import com.baran.ledger.domain.AccountType;
+import com.baran.ledger.domain.BalanceDrift;
 import com.baran.ledger.domain.Money;
 
 @Repository
@@ -70,6 +72,34 @@ public class AccountRepository {
         return jdbc.sql("UPDATE accounts SET balance = balance + ? WHERE id = ?")
                 .params(amount, accountId)
                 .update();
+    }
+
+    public long maxId() {
+        return jdbc.sql("SELECT COALESCE(max(id), 0) FROM accounts").query(Long.class).single();
+    }
+
+    /**
+     * I3, for one range of accounts: the materialized balance against the sum of the entries that
+     * produced it. The range is what keeps it batched - a single pass over every account would
+     * hold read locks and pull the whole entries table through memory on any real dataset.
+     *
+     * <p>The LEFT JOIN matters. An INNER JOIN would drop an account that has no entries at all,
+     * which is exactly the account a stray balance would be sitting on.
+     */
+    public List<BalanceDrift> findDrift(long lowestId, long highestId) {
+        return jdbc.sql("""
+                        SELECT a.id, a.balance, COALESCE(SUM(e.amount), 0) AS computed
+                        FROM accounts a LEFT JOIN ledger_entries e ON e.account_id = a.id
+                        WHERE a.id BETWEEN ? AND ?
+                        GROUP BY a.id, a.balance
+                        HAVING a.balance <> COALESCE(SUM(e.amount), 0)""")
+                .params(lowestId, highestId)
+                .query(AccountRepository::mapDrift)
+                .list();
+    }
+
+    private static BalanceDrift mapDrift(ResultSet rs, int rowNum) throws SQLException {
+        return new BalanceDrift(rs.getLong("id"), rs.getLong("balance"), rs.getLong("computed"));
     }
 
     private static Account mapAccount(ResultSet rs, int rowNum) throws SQLException {

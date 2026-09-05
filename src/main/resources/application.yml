@@ -44,9 +44,13 @@ ledger:
     relay:
       enabled: true
       interval-ms: 200
+  recon:
+    # Five minutes. Drift is not urgent to the minute, and the scan is the one query in the system
+    # that touches every account, so it is deliberately infrequent.
+    interval-ms: 300000
 
 management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,prometheus

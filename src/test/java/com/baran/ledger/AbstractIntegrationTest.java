@@ -18,7 +18,10 @@ import org.testcontainers.containers.PostgreSQLContainer;
         // both would spend the suite retrying a connection to a host that is not listening.
         "ledger.outbox.relay.enabled=false",
         "spring.kafka.listener.auto-startup=false",
-        "spring.kafka.admin.auto-create=false"
+        "spring.kafka.admin.auto-create=false",
+        // Far enough out that only the run at startup happens: a reconciliation pass firing in the
+        // middle of a test would count drift the test deliberately created, twice.
+        "ledger.recon.interval-ms=3600000"
 })
 public abstract class AbstractIntegrationTest {
 

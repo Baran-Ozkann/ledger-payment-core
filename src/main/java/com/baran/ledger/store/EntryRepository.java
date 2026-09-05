@@ -65,6 +65,11 @@ public class EntryRepository {
                         .list();
     }
 
+    /** I2: every entry ever written, summed. Double-entry means the answer is zero or a bug. */
+    public long sumOfAmounts() {
+        return jdbc.sql("SELECT COALESCE(SUM(amount), 0) FROM ledger_entries").query(Long.class).single();
+    }
+
     /**
      * The internal account id, which the responses above deliberately do not carry. A reversal
      * needs it: it locks by it and updates balances by it, and a public id would mean another

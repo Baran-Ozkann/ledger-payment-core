@@ -32,7 +32,10 @@ import static org.assertj.core.api.Assertions.fail;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "ledger.outbox.relay.enabled=true",
         "spring.kafka.listener.auto-startup=true",
-        "spring.kafka.admin.auto-create=true"
+        "spring.kafka.admin.auto-create=true",
+        // Far enough out that only the run at startup happens: a reconciliation pass firing in the
+        // middle of a test would count drift the test deliberately created, twice.
+        "ledger.recon.interval-ms=3600000"
 })
 @Tag("kafka")
 @Import(EventProbe.class)

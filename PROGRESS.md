@@ -13,11 +13,17 @@
 - [x] Four reversal tests: `reversalCreatesCompensatingEntries`, `reversalFailsOnInsufficientFunds`,
   `reversalOfUnknownTransactionIsNotFound`, and `doubleReversalRejected` with 20 concurrent threads
 
+- [x] `ReconciliationJob`: every five minutes, I3 per account in id-range batches of 10 000 and I2
+  across the ledger. Drift increments `ledger_balance_drift_total{scope}` and is logged with the
+  account ids; nothing is corrected. Prometheus endpoint exposed on the actuator
+- [x] Three reconciliation tests: `reconciliationDetectsDrift`, `reconciliationDoesNotAutoFix` and
+  a quiet pass over a ledger that agrees. The I2 alarm branch is unreachable by design - the
+  deferred trigger refuses an unbalanced transaction - so only its quiet path is exercised
+
 ## In progress
 - Nothing
 
 ## Next up in this phase
-- Reconciliation job, drift metric, no auto-correct
 - Retention jobs for idempotency keys and published outbox rows
 - Transfer, idempotency, deadlock and outbox metrics; Prometheus endpoint
 - Tracing through the outbox and Kafka

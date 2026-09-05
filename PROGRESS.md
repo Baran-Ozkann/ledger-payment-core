@@ -40,12 +40,16 @@
 ## In progress
 - Nothing; the phase deliverables are complete
 
+## Answers from the phase 3 review
+- [x] `spring-kafka`, `spring-boot-kafka` and `testcontainers-kafka` are approved and are now in the
+  approved-exceptions list in CLAUDE.md. Do not re-raise them
+- [x] ADR-003 stays in phase 6. The material in docs/future.md is where it lives until then
+- [x] `consumed_events` retention is documented only, deliberately. It is a configuration dependency
+  on the broker's retention window, not a cleanup job, so phase 4 does not own it
+
 ## Blocked / open questions
-- `spring-boot-kafka` was added beyond the approved dependency list. It is the Boot 4 module split
-  that made `spring-boot-flyway` necessary, and Phase 3 cannot use Kafka without it. Flagged in the
-  report for approval after the fact
-- CI durations are from local runs of the two exact CI commands. GitHub Actions has not run this
-  branch yet
+- CI durations are from local runs of the two exact CI commands. GitHub Actions had not run this
+  branch when the report was written
 
 ## Next step
-- Push phase-3-outbox; do not merge into main (merges are user-only). Wait for the audit
+- phase-3-outbox is pushed; do not merge into main (merges are user-only). Wait for the audit

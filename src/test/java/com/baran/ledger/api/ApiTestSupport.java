@@ -51,6 +51,11 @@ abstract class ApiTestSupport extends AbstractIntegrationTest {
         return exchange(http.get().uri(uri));
     }
 
+    /** The scrape endpoint answers in Prometheus text format, so it cannot be read as JSON. */
+    String getText(String uri) {
+        return http.get().uri(uri).exchange().returnResult(String.class).getResponseBody();
+    }
+
     /** A fresh key per call, so an ordinary request is never mistaken for a retry of an earlier one. */
     ApiResponse post(String uri, String json) {
         return post(uri, json, CLIENT_ID, UUID.randomUUID().toString());

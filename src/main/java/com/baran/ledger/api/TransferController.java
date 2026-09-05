@@ -15,9 +15,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.baran.ledger.config.RequestHashFilter;
+import com.baran.ledger.config.TransferMetrics;
 import com.baran.ledger.domain.IdempotencyRequest;
 import com.baran.ledger.domain.LedgerTransaction;
 import com.baran.ledger.domain.Money;
+import com.baran.ledger.domain.TxType;
 import com.baran.ledger.service.LedgerService;
 
 @RestController
@@ -27,9 +29,11 @@ class TransferController {
     private static final Logger LOG = LoggerFactory.getLogger(TransferController.class);
 
     private final LedgerService ledger;
+    private final TransferMetrics metrics;
 
-    TransferController(LedgerService ledger) {
+    TransferController(LedgerService ledger, TransferMetrics metrics) {
         this.ledger = ledger;
+        this.metrics = metrics;
     }
 
     @PostMapping
@@ -40,13 +44,13 @@ class TransferController {
             @RequestBody TransferRequest request) {
         IdempotencyRequest idempotency = IdempotencyRequest.of(clientId, idempotencyKey, requestHash);
         LOG.debug("Transfer requested by client {}", idempotency.clientId());
-        return IdempotentResponse.of(ledger.transfer(
+        return IdempotentResponse.of(metrics.record(TxType.TRANSFER, () -> ledger.transfer(
                 idempotency,
                 request.fromAccount(),
                 request.toAccount(),
                 Money.of(request.amount()),
                 request.description(),
-                this::render));
+                this::render)));
     }
 
     /**
@@ -62,7 +66,8 @@ class TransferController {
             @PathVariable UUID publicId) {
         IdempotencyRequest idempotency = IdempotencyRequest.of(clientId, idempotencyKey, requestHash);
         LOG.debug("Reversal of {} requested by client {}", publicId, idempotency.clientId());
-        return IdempotentResponse.of(ledger.reverse(idempotency, publicId, this::render));
+        return IdempotentResponse.of(
+                metrics.record(TxType.REVERSAL, () -> ledger.reverse(idempotency, publicId, this::render)));
     }
 
     @GetMapping("/{publicId}")

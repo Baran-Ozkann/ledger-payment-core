@@ -25,11 +25,17 @@
   `ledger_cleanup_rows_deleted_total{job}`. The archival filters on `published_at`, never
   `created_at`, and `unpublishedOutboxEventsNeverArchived` is the test that says so
 
+- [x] Metrics: `ledger_transfer_duration_seconds` (histogram) and `ledger_transfer_total`, both
+  tagged `operation` and `result`; `ledger_idempotency_hit_total`; `ledger_deadlock_retry_total`,
+  which stays at zero; `ledger_outbox_pending` and `ledger_outbox_lag_seconds` as gauges. The
+  wrapper sits in the controller, outside the transaction, so a failure at commit is counted
+- [x] Six metric tests, one of which reads `/actuator/prometheus` and asserts every metric name the
+  dashboard will query, because Micrometer renames on the way out
+
 ## In progress
 - Nothing
 
 ## Next up in this phase
-- Transfer, idempotency, deadlock and outbox metrics; Prometheus endpoint
 - Tracing through the outbox and Kafka
 - Prometheus, Grafana and Tempo in compose; dashboard JSON under ops/grafana/
 

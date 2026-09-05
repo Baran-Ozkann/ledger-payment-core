@@ -11,9 +11,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.baran.ledger.config.RequestHashFilter;
+import com.baran.ledger.config.TransferMetrics;
 import com.baran.ledger.domain.IdempotencyRequest;
 import com.baran.ledger.domain.LedgerTransaction;
 import com.baran.ledger.domain.Money;
+import com.baran.ledger.domain.TxType;
 import com.baran.ledger.service.LedgerService;
 
 /**
@@ -27,9 +29,11 @@ class FundingController {
     private static final Logger LOG = LoggerFactory.getLogger(FundingController.class);
 
     private final LedgerService ledger;
+    private final TransferMetrics metrics;
 
-    FundingController(LedgerService ledger) {
+    FundingController(LedgerService ledger, TransferMetrics metrics) {
         this.ledger = ledger;
+        this.metrics = metrics;
     }
 
     @PostMapping
@@ -40,13 +44,13 @@ class FundingController {
             @RequestBody TransferRequest request) {
         IdempotencyRequest idempotency = IdempotencyRequest.of(clientId, idempotencyKey, requestHash);
         LOG.debug("Funding requested by client {}", idempotency.clientId());
-        return IdempotentResponse.of(ledger.fund(
+        return IdempotentResponse.of(metrics.record(TxType.FUNDING, () -> ledger.fund(
                 idempotency,
                 request.fromAccount(),
                 request.toAccount(),
                 Money.of(request.amount()),
                 request.description(),
-                this::render));
+                this::render)));
     }
 
     private TransferResponse render(LedgerTransaction transaction) {

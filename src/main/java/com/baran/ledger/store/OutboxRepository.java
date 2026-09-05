@@ -63,6 +63,22 @@ public class OutboxRepository {
                 .single();
     }
 
+    /** Counted off the partial index, which only ever holds the backlog. */
+    public long countPending() {
+        return jdbc.sql("SELECT count(*) FROM outbox_events WHERE published_at IS NULL")
+                .query(Long.class)
+                .single();
+    }
+
+    /** Zero when there is no backlog, which is the honest reading: nothing is waiting. */
+    public double oldestPendingAgeSeconds() {
+        return jdbc.sql("""
+                        SELECT COALESCE(EXTRACT(EPOCH FROM now() - min(created_at)), 0)
+                        FROM outbox_events WHERE published_at IS NULL""")
+                .query(Double.class)
+                .single();
+    }
+
     /**
      * published_at, never created_at: a row with a NULL marker has not been sent yet, however old
      * it is, and NULL fails this comparison rather than matching it. Bounded by the same subselect

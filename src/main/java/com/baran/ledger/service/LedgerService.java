@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
+import com.baran.ledger.config.TransferMetrics;
 import com.baran.ledger.domain.Account;
 import com.baran.ledger.domain.AccountActivityEvent;
 import com.baran.ledger.domain.AccountType;
@@ -41,15 +42,18 @@ public class LedgerService {
     private final EntryRepository entries;
     private final IdempotencyRepository idempotency;
     private final OutboxRepository outbox;
+    private final TransferMetrics metrics;
     private final ObjectMapper json;
 
     LedgerService(AccountRepository accounts, TransactionRepository transactions, EntryRepository entries,
-                  IdempotencyRepository idempotency, OutboxRepository outbox, ObjectMapper json) {
+                  IdempotencyRepository idempotency, OutboxRepository outbox, TransferMetrics metrics,
+                  ObjectMapper json) {
         this.accounts = accounts;
         this.transactions = transactions;
         this.entries = entries;
         this.idempotency = idempotency;
         this.outbox = outbox;
+        this.metrics = metrics;
         this.json = json;
     }
 
@@ -171,6 +175,7 @@ public class LedgerService {
      * second, different request wearing the same key.
      */
     private IdempotentOutcome replayOf(IdempotencyRequest request) {
+        metrics.idempotencyHit();
         IdempotencyRecord record = idempotency.find(request.clientId(), request.key())
                 .orElseThrow(() -> new IllegalStateException(
                         "the key was claimed by someone else but no row is visible: " + request.key()));

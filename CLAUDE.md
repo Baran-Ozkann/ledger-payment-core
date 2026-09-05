@@ -124,6 +124,9 @@ A commit named `Fix stuff`, `WIP`, or `Phase 2` is unacceptable. So is a single 
 These were flagged and approved once; do not re-raise them:
 - `org.springframework.boot:spring-boot-testcontainers` — `@ServiceConnection` lives here
 - `org.springframework.boot:spring-boot-flyway` — Spring Boot 4 moved Flyway autoconfiguration out of `spring-boot-starter-jdbc`
+- `org.springframework.kafka:spring-kafka` — the producer and the `@KafkaListener` container (Phase 3)
+- `org.springframework.boot:spring-boot-kafka` — Spring Boot 4 moved the Kafka autoconfiguration and its Testcontainers service connection into this module, the same split as `spring-boot-flyway`
+- `org.testcontainers:testcontainers-kafka` — the KRaft-mode broker the Phase 3 tests run against
 
 Any further dependency beyond a phase's list still requires approval via OPEN QUESTIONS.
 

@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
 import com.baran.ledger.domain.Account;
+import com.baran.ledger.domain.AccountActivityEvent;
 import com.baran.ledger.domain.AccountType;
 import com.baran.ledger.domain.IdempotencyRecord;
 import com.baran.ledger.domain.IdempotencyRequest;
@@ -22,6 +23,7 @@ import com.baran.ledger.domain.TxType;
 import com.baran.ledger.store.AccountRepository;
 import com.baran.ledger.store.EntryRepository;
 import com.baran.ledger.store.IdempotencyRepository;
+import com.baran.ledger.store.OutboxRepository;
 import com.baran.ledger.store.TransactionRepository;
 
 @Service
@@ -36,14 +38,16 @@ public class LedgerService {
     private final TransactionRepository transactions;
     private final EntryRepository entries;
     private final IdempotencyRepository idempotency;
+    private final OutboxRepository outbox;
     private final ObjectMapper json;
 
     LedgerService(AccountRepository accounts, TransactionRepository transactions, EntryRepository entries,
-                  IdempotencyRepository idempotency, ObjectMapper json) {
+                  IdempotencyRepository idempotency, OutboxRepository outbox, ObjectMapper json) {
         this.accounts = accounts;
         this.transactions = transactions;
         this.entries = entries;
         this.idempotency = idempotency;
+        this.outbox = outbox;
         this.json = json;
     }
 
@@ -173,7 +177,30 @@ public class LedgerService {
         accounts.credit(destination.id(), amount.minorUnits());
         entries.insert(transactionId, source.id(), amount.negated().minorUnits(), source.currency());
         entries.insert(transactionId, destination.id(), amount.minorUnits(), destination.currency());
-        return transaction(publicId);
+
+        LedgerTransaction transaction = transaction(publicId);
+        announce(transaction, source, amount.negated());
+        announce(transaction, destination, amount);
+        return transaction;
+    }
+
+    /**
+     * The event is a row this transaction writes, not a call to a broker. Calling a broker from
+     * here would announce transfers that then roll back, and lose the ones that commit while the
+     * broker is unreachable; the row cannot disagree with the entries it was written beside.
+     *
+     * <p>One event per entry, keyed by the account: the account is the aggregate a consumer cares
+     * about, and it is what the partition key has to be for per-account ordering to mean anything.
+     */
+    private void announce(LedgerTransaction transaction, Account account, Money amount) {
+        AccountActivityEvent event = new AccountActivityEvent(
+                transaction.publicId(), account.publicId(), amount.minorUnits(),
+                account.currency(), transaction.txType());
+        outbox.append(
+                AccountActivityEvent.AGGREGATE_TYPE,
+                account.publicId().toString(),
+                AccountActivityEvent.EVENT_TYPE,
+                json.writeValueAsString(event));
     }
 
     /**

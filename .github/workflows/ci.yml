@@ -23,4 +23,23 @@ jobs:
         run: bash ci/check-rules.sh
 
       - name: Build and test
-        run: ./mvnw -B verify
+        run: ./mvnw -B verify -Dtest.excludedGroups=kafka
+
+  kafka:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # A broker of its own, started by Testcontainers. Kept apart from the job above so that a
+      # broker that will not start is never mistaken for a ledger that does not work.
+      - name: Kafka integration tests
+        run: ./mvnw -B verify -Dtest.groups=kafka

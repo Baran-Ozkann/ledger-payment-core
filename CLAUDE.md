@@ -127,6 +127,7 @@ These were flagged and approved once; do not re-raise them:
 - `org.springframework.kafka:spring-kafka` — the producer and the `@KafkaListener` container (Phase 3)
 - `org.springframework.boot:spring-boot-kafka` — Spring Boot 4 moved the Kafka autoconfiguration and its Testcontainers service connection into this module, the same split as `spring-boot-flyway`
 - `org.testcontainers:testcontainers-kafka` — the KRaft-mode broker the Phase 3 tests run against
+- `org.springframework.boot:spring-boot-starter-opentelemetry` — Spring Boot 4 moved Micrometer Tracing, the OpenTelemetry bridge and the OTLP span exporter behind this one starter, the same split as `spring-boot-flyway` and `spring-boot-kafka` (Phase 4). The `micrometer-registry-otlp` it brings is excluded: metrics leave over the Prometheus scrape endpoint, not OTLP
 
 Any further dependency beyond a phase's list still requires approval via OPEN QUESTIONS.
 

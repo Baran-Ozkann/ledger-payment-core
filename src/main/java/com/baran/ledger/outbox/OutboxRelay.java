@@ -9,6 +9,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.baran.ledger.config.TraceContexts;
 import com.baran.ledger.domain.OutboxEvent;
 import com.baran.ledger.store.OutboxRepository;
 
@@ -30,12 +31,16 @@ public class OutboxRelay {
     /** One batch is one transaction, and the rows in it stay locked for its duration. */
     private static final int BATCH_SIZE = 100;
 
+    private static final String PUBLISH_SPAN = "outbox publish";
+
     private final OutboxRepository outbox;
     private final AccountActivityPublisher publisher;
+    private final TraceContexts traces;
 
-    OutboxRelay(OutboxRepository outbox, AccountActivityPublisher publisher) {
+    OutboxRelay(OutboxRepository outbox, AccountActivityPublisher publisher, TraceContexts traces) {
         this.outbox = outbox;
         this.publisher = publisher;
+        this.traces = traces;
     }
 
     /**
@@ -51,7 +56,7 @@ public class OutboxRelay {
 
         for (OutboxEvent event : pending) {
             try {
-                publisher.publish(event);
+                traces.continuing(event.traceParent(), PUBLISH_SPAN, () -> publisher.publish(event));
             } catch (EventPublishFailed failure) {
                 int attempts = outbox.recordFailure(event.id(), String.valueOf(failure.getCause()));
                 LOG.warn("Publishing {} event {} failed {} time(s); the batch stops here",

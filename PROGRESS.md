@@ -2,7 +2,7 @@
 
 **Current phase:** 4 — Reversal, reconciliation, observability
 **Branch:** phase-4-recon-observability (branched from main, which now carries phases 0 to 3)
-**Last updated:** 2026-09-05
+**Last updated:** 2026-09-06
 
 ## Done in this phase
 - [x] `POST /v1/transfers/{publicId}/reversals`: a new REVERSAL transaction carrying the original's
@@ -32,12 +32,20 @@
 - [x] Six metric tests, one of which reads `/actuator/prometheus` and asserts every metric name the
   dashboard will query, because Micrometer renames on the way out
 
+- [x] Tracing: the request's W3C traceparent is written onto the outbox row inside the transfer
+  transaction (`V11`), and the relay republishes inside it, so the producer span is a child of the
+  request rather than the root of something unrelated. `spring.kafka.template.observation-enabled`
+  and its listener counterpart carry it the rest of the way, over the record's own headers
+- [x] `TracePropagationTest`: the caller supplies the traceparent, so the trace id is known before
+  the request is made and every hop afterwards has to agree with a value decided outside the
+  application. Break proof recorded - with the producer observation off, the consumer lands in a
+  different trace and the test says so
+
 ## In progress
 - Nothing
 
 ## Next up in this phase
-- Tracing through the outbox and Kafka
-- Prometheus, Grafana and Tempo in compose; dashboard JSON under ops/grafana/
+- Grafana screenshot of the single HTTP-to-consumer trace, into docs/images/
 
 ## Blocked / open questions
 - Nothing yet

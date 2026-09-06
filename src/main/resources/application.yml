@@ -18,6 +18,10 @@ spring:
       enabled: true
   kafka:
     bootstrap-servers: localhost:9092
+    template:
+      # Without this the producer never injects traceparent and the consumer starts a trace of its
+      # own, so a slow request and the event it caused end up in two unrelated traces.
+      observation-enabled: true
     producer:
       acks: all
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -35,6 +39,9 @@ spring:
       auto-offset-reset: earliest
       enable-auto-commit: false
     listener:
+      # The other half of the same switch: the container extracts traceparent off the record and
+      # runs the listener inside the trace that wrote it.
+      observation-enabled: true
       # The offset moves only after the listener method has returned, which is after the dedup row
       # and the projection write have committed together. Committing earlier would lose the event.
       ack-mode: record
@@ -58,3 +65,15 @@ management:
     web:
       exposure:
         include: health,prometheus
+  tracing:
+    sampling:
+      # Every request. This is a project that is measured, not a service paying for its own volume,
+      # and a sampled-out trace is one that cannot be used to answer a question afterwards.
+      probability: 1.0
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          # Tempo's OTLP/HTTP receiver, from the compose stack. Nothing listening here is not an
+          # error the application should care about: spans are dropped, requests are still served.
+          endpoint: http://localhost:4318/v1/traces

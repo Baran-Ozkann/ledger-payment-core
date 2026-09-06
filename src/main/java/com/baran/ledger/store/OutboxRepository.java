@@ -19,11 +19,13 @@ public class OutboxRepository {
     }
 
     /** Called inside the transfer transaction, so the event and the entries become visible together. */
-    public void append(String aggregateType, String aggregateId, String eventType, String payload) {
+    public void append(
+            String aggregateType, String aggregateId, String eventType, String payload, String traceParent) {
         jdbc.sql("""
-                        INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload)
-                        VALUES (?, ?, ?, ?::jsonb)""")
-                .params(aggregateType, aggregateId, eventType, payload)
+                        INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload,
+                                                   trace_parent)
+                        VALUES (?, ?, ?, ?::jsonb, ?)""")
+                .params(aggregateType, aggregateId, eventType, payload, traceParent)
                 .update();
     }
 
@@ -34,7 +36,8 @@ public class OutboxRepository {
      */
     public List<OutboxEvent> lockUnpublished(int limit) {
         return jdbc.sql("""
-                        SELECT id, aggregate_type, aggregate_id, event_type, payload::text AS payload
+                        SELECT id, aggregate_type, aggregate_id, event_type, payload::text AS payload,
+                               trace_parent
                         FROM outbox_events
                         WHERE published_at IS NULL
                         ORDER BY id
@@ -103,6 +106,7 @@ public class OutboxRepository {
                 rs.getString("aggregate_type"),
                 rs.getString("aggregate_id"),
                 rs.getString("event_type"),
-                rs.getString("payload"));
+                rs.getString("payload"),
+                rs.getString("trace_parent"));
     }
 }

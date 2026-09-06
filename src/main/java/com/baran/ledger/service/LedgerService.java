@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
+import com.baran.ledger.config.TraceContexts;
 import com.baran.ledger.config.TransferMetrics;
 import com.baran.ledger.domain.Account;
 import com.baran.ledger.domain.AccountActivityEvent;
@@ -43,17 +44,19 @@ public class LedgerService {
     private final IdempotencyRepository idempotency;
     private final OutboxRepository outbox;
     private final TransferMetrics metrics;
+    private final TraceContexts traces;
     private final ObjectMapper json;
 
     LedgerService(AccountRepository accounts, TransactionRepository transactions, EntryRepository entries,
                   IdempotencyRepository idempotency, OutboxRepository outbox, TransferMetrics metrics,
-                  ObjectMapper json) {
+                  TraceContexts traces, ObjectMapper json) {
         this.accounts = accounts;
         this.transactions = transactions;
         this.entries = entries;
         this.idempotency = idempotency;
         this.outbox = outbox;
         this.metrics = metrics;
+        this.traces = traces;
         this.json = json;
     }
 
@@ -242,7 +245,8 @@ public class LedgerService {
                 AccountActivityEvent.AGGREGATE_TYPE,
                 accountPublicId.toString(),
                 AccountActivityEvent.EVENT_TYPE,
-                json.writeValueAsString(event));
+                json.writeValueAsString(event),
+                traces.current());
     }
 
     /**

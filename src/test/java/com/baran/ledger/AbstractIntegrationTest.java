@@ -21,7 +21,10 @@ import org.testcontainers.containers.PostgreSQLContainer;
         "spring.kafka.admin.auto-create=false",
         // Far enough out that only the run at startup happens: a reconciliation pass firing in the
         // middle of a test would count drift the test deliberately created, twice.
-        "ledger.recon.interval-ms=3600000"
+        "ledger.recon.interval-ms=3600000",
+        // Spans are still recorded and still propagate; there is simply no collector listening in
+        // a test run, and an exporter retrying one would put a stack trace under every assertion.
+        "management.tracing.export.enabled=false"
 })
 public abstract class AbstractIntegrationTest {
 

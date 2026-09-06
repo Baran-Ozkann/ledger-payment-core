@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -25,6 +27,12 @@ public class EventProbe {
 
     private final List<Delivery> deliveries = Collections.synchronizedList(new ArrayList<>());
 
+    private final Tracer tracer;
+
+    EventProbe(Tracer tracer) {
+        this.tracer = tracer;
+    }
+
     @KafkaListener(topics = EventTopics.ACCOUNT_ACTIVITY, groupId = GROUP)
     void record(ConsumerRecord<String, String> record) {
         Header eventId = record.headers().lastHeader(EventTopics.EVENT_ID_HEADER);
@@ -32,7 +40,18 @@ public class EventProbe {
                 Long.parseLong(new String(eventId.value(), UTF_8)),
                 record.key(),
                 record.partition(),
-                record.value()));
+                record.value(),
+                consumingTraceId()));
+    }
+
+    /**
+     * Read inside the listener, not off the record's headers. A header only proves something was
+     * written onto the wire; this is the trace the consumer is actually running in, which is the
+     * thing a trace view joins on.
+     */
+    private String consumingTraceId() {
+        Span span = tracer.currentSpan();
+        return span == null ? null : span.context().traceId();
     }
 
     /** In arrival order, which is the property the ordering test is about. */
@@ -46,6 +65,7 @@ public class EventProbe {
         deliveries.clear();
     }
 
-    public record Delivery(long eventId, String aggregateId, int partition, String payload) {
+    public record Delivery(
+            long eventId, String aggregateId, int partition, String payload, String traceId) {
     }
 }

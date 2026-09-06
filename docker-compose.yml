@@ -42,6 +42,67 @@ services:
       retries: 12
       start_period: 20s
 
+  # Traces arrive over OTLP from the application, which runs on the host rather than as a service
+  # here: it is the one thing in this stack that gets restarted and debugged constantly.
+  tempo:
+    image: grafana/tempo:2.8.1
+    command: ["-config.file=/etc/tempo.yml"]
+    user: "0:0"
+    configs:
+      - source: tempo
+        target: /etc/tempo.yml
+    ports:
+      - "${TEMPO_OTLP_HTTP_PORT:-4318}:4318"
+      - "${TEMPO_PORT:-3200}:3200"
+    volumes:
+      - tempo-data:/var/tempo
+
+  prometheus:
+    image: prom/prometheus:v3.4.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=24h
+    configs:
+      - source: prometheus
+        target: /etc/prometheus/prometheus.yml
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    extra_hosts:
+      # Named automatically on Docker Desktop, but not on a Linux daemon, and the scrape target is
+      # the host either way.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - prometheus-data:/prometheus
+
+  grafana:
+    image: grafana/grafana:12.0.2
+    environment:
+      # A local stack with nothing private in it. A login screen between the reviewer and the
+      # dashboard would buy nothing and cost the first ten minutes of the quick start.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - tempo
+
+# Read-only single files, so a bind mount of a whole directory is not needed to deliver one config.
+configs:
+  tempo:
+    file: ./ops/tempo/tempo.yml
+  prometheus:
+    file: ./ops/prometheus/prometheus.yml
+
 volumes:
   postgres-data:
   kafka-data:
+  tempo-data:
+  prometheus-data:
+  grafana-data:

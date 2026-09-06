@@ -1,0 +1,11 @@
+# The application is not a compose service: it runs on the host so it can be restarted, debugged
+# and profiled without a rebuild. Everything that observes it runs here instead.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: ledger
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8080"]

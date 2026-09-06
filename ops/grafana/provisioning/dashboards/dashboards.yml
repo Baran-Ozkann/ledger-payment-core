@@ -1,0 +1,11 @@
+# The dashboard is a file in the repository, not something drawn in the UI: a dashboard built by
+# hand exists only in one browser's Grafana and is gone with the volume.
+apiVersion: 1
+
+providers:
+  - name: ledger
+    type: file
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

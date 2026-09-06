@@ -41,11 +41,16 @@
   application. Break proof recorded - with the producer observation off, the consumer lands in a
   different trace and the test says so
 
-## In progress
-- Nothing
+- [x] Prometheus, Tempo and Grafana in compose, with the datasources and the dashboard provisioned
+  from `ops/` rather than drawn in the UI. The application stays on the host, which is why the
+  scrape target is `host.docker.internal:8080`; putting it in compose belongs to phase 6
+- [x] `docs/images/trace-http-to-consumer.png`: one trace, seven spans, the HTTP request at the
+  root and a consumer span at the end of each of the transfer's two entries
 
-## Next up in this phase
-- Grafana screenshot of the single HTTP-to-consumer trace, into docs/images/
+## In progress
+- Nothing. The phase is complete; the branch is ready for audit
 
 ## Blocked / open questions
-- Nothing yet
+- `spring-boot-starter-opentelemetry` is not on the approved dependency list in CLAUDE.md. Phase 4
+  names Micrometer Tracing and OpenTelemetry as a deliverable and this is Boot 4's single starter
+  for both, so it was treated as covered by the phase definition. It needs sign-off

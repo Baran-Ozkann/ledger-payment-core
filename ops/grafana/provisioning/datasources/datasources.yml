@@ -1,0 +1,17 @@
+# Fixed uids, because the dashboard JSON in this repository refers to them by uid. A Grafana that
+# generated its own would load the dashboard with every panel pointing at nothing.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: ledger-prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+
+  - name: Tempo
+    type: tempo
+    uid: ledger-tempo
+    access: proxy
+    url: http://tempo:3200

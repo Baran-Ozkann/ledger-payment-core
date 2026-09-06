@@ -82,3 +82,22 @@ conversation, but it cannot use the same rule: deleting a row means the next red
 event is applied a second time. It can only be pruned past the point where redelivery is
 impossible, which is the broker's own retention window, so the two settings have to be decided
 together rather than a day being picked for it.
+
+## The application as a compose service — Phase 6
+
+`docker compose up` brings up PostgreSQL, Kafka, Tempo, Prometheus and Grafana, but not the ledger.
+It runs on the host, which is why Prometheus scrapes `host.docker.internal:8080` and why the OTLP
+endpoint is `localhost:4318`. That is the right trade during development, where the application is
+the one thing being restarted constantly, and the wrong one for the Phase 6 exit criterion, which
+is `docker compose up` followed by a single `curl`. Adding the service means a Dockerfile, a
+profile that points at the service names instead of localhost, and a `depends_on` on the two
+healthchecks that already exist.
+
+## Exemplars: from a slow histogram bucket to the trace that filled it
+
+Micrometer can attach a trace id to a Prometheus histogram sample, so clicking the p99 bucket in
+the latency panel opens the trace of a request that landed in it. It needs `exemplars` enabled on
+the Prometheus side and `traceToMetrics` wiring in the Grafana datasource, and it is the natural
+next step now that the trace and the metric exist for the same request. It was left out of Phase 4
+because the phase's deliverable is that both signals exist and are correct; joining them is a
+convenience on top, and one more thing to get wrong in a dashboard nobody has used yet.

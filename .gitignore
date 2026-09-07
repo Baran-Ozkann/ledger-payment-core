@@ -30,3 +30,9 @@ Thumbs.db
 
 # jqwik failure persistence
 .jqwik-database
+
+# Load harness output: the parsed result JSON is committed, its raw sources are not
+load/results/*.log
+load/results/*.csv
+load/results/*.sql
+load/accounts.json

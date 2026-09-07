@@ -57,6 +57,11 @@ python load/run.py --name u-read-committed --scenario u --pg-port 5433 --reseed
 `run.py` starts and stops the application itself. Nothing should be listening on 8080
 when it begins.
 
+The application answers the API on **127.0.0.1:8080** and actuator on **8081**: the ledger
+has no authentication and moves money, so it is not on the network, while the two read-only
+actuator endpoints are, because Prometheus scrapes them from inside a container. It connects
+as `ledger_app`, which cannot UPDATE or DELETE a ledger entry; migrations run as `ledger`.
+
 ## The ramp
 
 One minute of warmup at 10 VUs, then 10, 50, 100, 200 and 400 VUs for two minutes each.

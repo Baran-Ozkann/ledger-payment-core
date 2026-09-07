@@ -2,7 +2,10 @@ spring:
   application:
     name: ledger
   datasource:
-    url: jdbc:postgresql://localhost:5432/ledger
+    # 127.0.0.1, not localhost. Every published port binds IPv4 loopback only, and on Windows
+    # localhost resolves to ::1 first, so a name here costs a failed connection and its two
+    # second timeout on every attempt. Measured: 2049 ms per request against 14 ms.
+    url: jdbc:postgresql://127.0.0.1:5432/ledger
     # Not the owner, and not a superuser. It holds exactly the verbs the code issues and cannot
     # UPDATE or DELETE a ledger entry, which is the second of I5's two defenses; disabling the
     # trigger that is the first one needs table ownership it does not have. See V12.
@@ -26,7 +29,7 @@ spring:
     problemdetails:
       enabled: true
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: 127.0.0.1:9092
     template:
       # Without this the producer never injects traceparent and the consumer starts a trace of its
       # own, so a slow request and the event it caused end up in two unrelated traces.
@@ -85,8 +88,14 @@ management:
   server:
     # Metrics and health on their own connector, because Prometheus runs in a container and
     # reaches the host by its gateway address rather than by loopback. Splitting the ports is what
-    # lets the scrape keep working while the API above stops being reachable: what is exposed here
-    # is two read-only endpoints that move nothing.
+    # lets the scrape keep working while the API above stops being reachable.
+    #
+    # This connector is still on every interface, and that is a knowing trade rather than an
+    # oversight: what it serves is /actuator/health and /actuator/prometheus, both read-only, and
+    # narrowing it to the Docker gateway would hard-code an address that differs on every machine.
+    # It leaks operational shape - request rates, JVM internals, outbox depth - and moves nothing.
+    # It stops being exposed at all once the application becomes a compose service, which is the
+    # phase 6 plan recorded in docs/future.md.
     port: 8081
     address: 0.0.0.0
   endpoints:
@@ -104,4 +113,4 @@ management:
         otlp:
           # Tempo's OTLP/HTTP receiver, from the compose stack. Nothing listening here is not an
           # error the application should care about: spans are dropped, requests are still served.
-          endpoint: http://localhost:4318/v1/traces
+          endpoint: http://127.0.0.1:4318/v1/traces

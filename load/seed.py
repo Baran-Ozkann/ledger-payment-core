@@ -18,7 +18,7 @@ import urllib.request
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
-DEFAULT_URL = "http://localhost:8080"
+DEFAULT_URL = "http://127.0.0.1:8080"
 DEFAULT_ACCOUNTS = 10_000
 # Enough that no account can run dry over a full ramp: the scenarios move 1 000 kurus at a time,
 # and no single account is picked anywhere near a million times in eleven minutes.

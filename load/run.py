@@ -27,8 +27,14 @@ HERE = pathlib.Path(__file__).parent
 PROJECT = HERE.parent
 RESULTS = HERE / "results"
 
+# 127.0.0.1 rather than localhost throughout: the published ports bind IPv4 loopback only, and on
+# Windows localhost resolves to ::1 first, which costs a failed connection and its timeout on every
+# request. Measured at 2049 ms per request against 14 ms - enough to invalidate a measurement.
+APP_HOST = "127.0.0.1"
 APP_PORT = 8080
-PROMETHEUS = "http://localhost:9090"
+# Actuator answers on its own connector; the API port does not serve /actuator at all.
+MANAGEMENT_PORT = 8081
+PROMETHEUS = "http://127.0.0.1:9090"
 SAMPLE_SECONDS = 2
 SAMPLER_NAME = "load-sampler"
 STARTUP_TIMEOUT_SECONDS = 120
@@ -108,7 +114,8 @@ def await_health() -> None:
     deadline = time.monotonic() + STARTUP_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
         try:
-            with urllib.request.urlopen(f"http://localhost:{APP_PORT}/actuator/health", timeout=5) as answer:
+            with urllib.request.urlopen(
+                    f"http://{APP_HOST}:{MANAGEMENT_PORT}/actuator/health", timeout=5) as answer:
                 if json.loads(answer.read())["status"] == "UP":
                     return
         except (urllib.error.URLError, OSError, KeyError, ValueError):
@@ -205,7 +212,7 @@ def reseed(jar: pathlib.Path, jdbc_url: str, log: pathlib.Path, accounts: int) -
     try:
         await_health()
         seed = subprocess.run(
-            [sys.executable, str(HERE / "seed.py"), "--url", f"http://localhost:{APP_PORT}",
+            [sys.executable, str(HERE / "seed.py"), "--url", f"http://{APP_HOST}:{APP_PORT}",
              "--accounts", str(accounts)],
             cwd=PROJECT, check=False, capture_output=True, text=True)
         print(seed.stdout.strip(), flush=True)
@@ -233,7 +240,7 @@ def run_k6(k6: str, script: pathlib.Path, run_id: str, summary: pathlib.Path) ->
         "RUN_ID": run_id,
         "SUMMARY_FILE": str(summary),
         "ACCOUNTS_FILE": (HERE / "accounts.json").as_posix(),
-        "LEDGER_URL": f"http://localhost:{APP_PORT}",
+        "LEDGER_URL": f"http://{APP_HOST}:{APP_PORT}",
         "K6_NO_USAGE_REPORT": "true",
     })
     return subprocess.run([k6, "run", str(script)], cwd=HERE / "k6", env=environment).returncode
@@ -300,7 +307,7 @@ def main() -> int:
     RESULTS.mkdir(exist_ok=True)
     run_id = f"{arguments.name}-{int(time.time())}"
     application_name = f"ledger-{run_id}"
-    jdbc_url = (f"jdbc:postgresql://localhost:{arguments.pg_port}/ledger"
+    jdbc_url = (f"jdbc:postgresql://{APP_HOST}:{arguments.pg_port}/ledger"
                 f"?ApplicationName={application_name}")
     profiles = [profile for profile in arguments.profiles.split(",") if profile]
 

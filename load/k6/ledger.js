@@ -5,7 +5,7 @@ import http from 'k6/http';
 import { SharedArray } from 'k6/data';
 import { Trend, Counter } from 'k6/metrics';
 
-const BASE_URL = __ENV.LEDGER_URL || 'http://localhost:8080';
+const BASE_URL = __ENV.LEDGER_URL || 'http://127.0.0.1:8080';
 const ACCOUNTS_FILE = __ENV.ACCOUNTS_FILE || '../accounts.json';
 
 // Stamped into every idempotency key. Nothing empties the database between runs, so without it a

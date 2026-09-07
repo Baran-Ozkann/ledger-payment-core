@@ -36,3 +36,7 @@ load/results/*.log
 load/results/*.csv
 load/results/*.sql
 load/accounts.json
+
+# Python bytecode from the load harness
+__pycache__/
+*.pyc

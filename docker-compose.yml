@@ -61,7 +61,9 @@ services:
     image: prom/prometheus:v3.4.1
     command:
       - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.retention.time=24h
+      # A load ramp runs for a quarter of an hour and gets read afterwards, sometimes days
+      # afterwards. At 24h the first steps of a run roll off before anyone plots them.
+      - --storage.tsdb.retention.time=30d
     configs:
       - source: prometheus
         target: /etc/prometheus/prometheus.yml

@@ -24,7 +24,16 @@ import org.testcontainers.containers.PostgreSQLContainer;
         "ledger.recon.interval-ms=3600000",
         // Spans are still recorded and still propagate; there is simply no collector listening in
         // a test run, and an exporter retrying one would put a stack trace under every assertion.
-        "management.tracing.export.enabled=false"
+        "management.tracing.export.enabled=false",
+        // The container hands out its own credentials and @ServiceConnection wires them into the
+        // datasource, but not into Flyway, which application.yml points at the owner role. These
+        // put migrations back on the container's user so both halves talk to the same database.
+        "spring.flyway.user=test",
+        "spring.flyway.password=test",
+        // A management connector of its own, on a random port, which is the shape the application
+        // actually runs in: the API on one port and actuator on another. A test that collapsed the
+        // two would be asserting against a topology nothing deploys.
+        "management.server.port=0"
 })
 public abstract class AbstractIntegrationTest {
 

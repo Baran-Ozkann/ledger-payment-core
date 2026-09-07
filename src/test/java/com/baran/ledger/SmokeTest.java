@@ -8,15 +8,16 @@ import java.sql.Timestamp;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class SmokeTest extends AbstractIntegrationTest {
 
-    @LocalServerPort
-    int port;
+    /** Actuator is on its own connector: the API port answers 404 for it, and should. */
+    @LocalManagementPort
+    int managementPort;
 
     @Autowired
     JdbcClient jdbcClient;
@@ -41,7 +42,7 @@ class SmokeTest extends AbstractIntegrationTest {
     @Test
     void healthEndpointReportsUp() throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:" + port + "/actuator/health"))
+                .uri(URI.create("http://localhost:" + managementPort + "/actuator/health"))
                 .GET()
                 .build();
 

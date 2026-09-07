@@ -53,7 +53,9 @@ class LedgerInvariantPropertiesTest {
                 .run(
                         "--spring.datasource.url=" + postgres.getJdbcUrl(),
                         "--spring.datasource.username=" + postgres.getUsername(),
-                        "--spring.datasource.password=" + postgres.getPassword());
+                        "--spring.datasource.password=" + postgres.getPassword(),
+                        "--spring.flyway.user=" + postgres.getUsername(),
+                        "--spring.flyway.password=" + postgres.getPassword());
         ledger = context.getBean(LedgerService.class);
         jdbc = context.getBean(JdbcClient.class);
 

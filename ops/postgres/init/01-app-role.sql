@@ -1,0 +1,11 @@
+-- Runs once, when the postgres image initialises an empty data directory.
+--
+-- The role is also created by migration V12, which is what covers Testcontainers. It is created
+-- here as well because the application's connection pool and Flyway are different datasources with
+-- different credentials: on a brand-new volume the pool would otherwise try to authenticate as a
+-- role that the migration has not created yet. Creating it before anything connects removes that
+-- ordering question entirely.
+--
+-- Privileges are deliberately NOT granted here. The tables do not exist yet, and the grants belong
+-- with the schema they describe, which is V12.
+CREATE ROLE ledger_app LOGIN PASSWORD 'ledger_app';

@@ -98,7 +98,7 @@ class TransferMetricsTest extends ApiTestSupport {
         assertThat(post("/v1/transfers", transferBody(source, destination, 1_000L)).status())
                 .isEqualTo(HttpStatus.CREATED);
 
-        String scrape = getText("/actuator/prometheus");
+        String scrape = getManagementText("/actuator/prometheus");
 
         assertThat(scrape).contains(
                 "ledger_transfer_total",

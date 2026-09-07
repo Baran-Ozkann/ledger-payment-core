@@ -13,6 +13,9 @@ services:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      # Creates the unprivileged role the application connects as, before the application first
+      # connects. Runs only on an empty data directory, which is when it is needed.
+      - ./ops/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ledger -d ledger"]
       interval: 5s

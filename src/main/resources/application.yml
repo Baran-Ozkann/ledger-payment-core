@@ -3,11 +3,20 @@ spring:
     name: ledger
   datasource:
     url: jdbc:postgresql://localhost:5432/ledger
-    username: ledger
-    password: ledger
+    # Not the owner, and not a superuser. It holds exactly the verbs the code issues and cannot
+    # UPDATE or DELETE a ledger entry, which is the second of I5's two defenses; disabling the
+    # trigger that is the first one needs table ownership it does not have. See V12.
+    username: ledger_app
+    password: ledger_app
   flyway:
     enabled: true
     locations: classpath:db/migration
+    # Migrations need DDL and the application does not, so they run as the owner and the
+    # application never holds those rights at all. This is the whole point of the split: a bug
+    # that reaches JdbcClient with the wrong SQL cannot rewrite history, because the connection
+    # it would use is not allowed to.
+    user: ledger
+    password: ledger
   jackson:
     property-naming-strategy: SNAKE_CASE
     deserialization:
@@ -66,7 +75,20 @@ ledger:
     # that touches every account, so it is deliberately infrequent.
     interval-ms: 300000
 
+server:
+  # The ledger moves money and has no authentication, so it answers on loopback only. Reaching it
+  # from elsewhere is a deliberate act - an SSH tunnel, or the compose network once the
+  # application becomes a service there - rather than the default.
+  address: 127.0.0.1
+
 management:
+  server:
+    # Metrics and health on their own connector, because Prometheus runs in a container and
+    # reaches the host by its gateway address rather than by loopback. Splitting the ports is what
+    # lets the scrape keep working while the API above stops being reachable: what is exposed here
+    # is two read-only endpoints that move nothing.
+    port: 8081
+    address: 0.0.0.0
   endpoints:
     web:
       exposure:

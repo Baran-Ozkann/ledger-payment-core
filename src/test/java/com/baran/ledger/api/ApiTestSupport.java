@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
@@ -30,14 +31,20 @@ abstract class ApiTestSupport extends AbstractIntegrationTest {
     @LocalServerPort
     int port;
 
+    /** Actuator answers on its own connector, so it has its own port to ask. */
+    @LocalManagementPort
+    int managementPort;
+
     @Autowired
     JdbcClient jdbc;
 
     private RestTestClient http;
+    private RestTestClient management;
 
     @BeforeEach
     void bindToRunningServer() {
         http = RestTestClient.bindToServer().baseUrl("http://localhost:" + port).build();
+        management = RestTestClient.bindToServer().baseUrl("http://localhost:" + managementPort).build();
     }
 
     record ApiResponse(HttpStatusCode status, Map<String, Object> body) {
@@ -52,8 +59,8 @@ abstract class ApiTestSupport extends AbstractIntegrationTest {
     }
 
     /** The scrape endpoint answers in Prometheus text format, so it cannot be read as JSON. */
-    String getText(String uri) {
-        return http.get().uri(uri).exchange().returnResult(String.class).getResponseBody();
+    String getManagementText(String uri) {
+        return management.get().uri(uri).exchange().returnResult(String.class).getResponseBody();
     }
 
     /** A fresh key per call, so an ordinary request is never mistaken for a retry of an earlier one. */

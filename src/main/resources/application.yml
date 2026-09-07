@@ -55,6 +55,12 @@ ledger:
     # Daily and an hour apart, so the two never compete for the same connections.
     idempotency-keys-cron: "0 15 3 * * *"
     outbox-cron: "0 15 4 * * *"
+  concurrency:
+    # ADR-004, the shipped half. Two transfers over the same pair of accounts ask for the same rows
+    # in the same order, so one queues behind the other and neither is ever aborted - which is what
+    # lets a single attempt be the whole story. The serializable profile is the measured alternative.
+    ordered-locking: true
+    max-attempts: 1
   recon:
     # Five minutes. Drift is not urgent to the minute, and the scan is the one query in the system
     # that touches every account, so it is deliberately infrequent.

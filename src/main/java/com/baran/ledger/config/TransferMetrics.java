@@ -26,11 +26,13 @@ public class TransferMetrics {
     private static final String OUTCOMES = "ledger.transfer";
 
     private final MeterRegistry meters;
+    private final ConcurrencyPolicy concurrency;
     private final Counter idempotencyHits;
     private final Counter deadlocks;
 
-    TransferMetrics(MeterRegistry meters) {
+    TransferMetrics(MeterRegistry meters, ConcurrencyPolicy concurrency) {
         this.meters = meters;
+        this.concurrency = concurrency;
         this.idempotencyHits = Counter.builder("ledger.idempotency.hit")
                 .description("Requests answered from a stored response instead of being executed")
                 .register(meters);
@@ -39,10 +41,15 @@ public class TransferMetrics {
                 .register(meters);
     }
 
+    /**
+     * The timer is started outside the retry policy rather than inside it: an attempt the database
+     * threw away is still time the caller spent waiting, and a measurement that counts only the
+     * winning attempt would describe a system nobody is talking to.
+     */
     public <T> T record(TxType operation, Supplier<T> work) {
         Timer.Sample sample = Timer.start(meters);
         try {
-            T outcome = work.get();
+            T outcome = concurrency.attempt(work);
             stop(sample, operation, "success");
             return outcome;
         } catch (LedgerException rejected) {

@@ -105,6 +105,7 @@ class TransferMetricsTest extends ApiTestSupport {
                 "ledger_transfer_duration_seconds_bucket",
                 "ledger_idempotency_hit_total",
                 "ledger_deadlock_retry_total",
+                "ledger_serialization_retry_total",
                 "ledger_balance_drift_total",
                 "ledger_outbox_pending",
                 "ledger_outbox_lag_seconds",

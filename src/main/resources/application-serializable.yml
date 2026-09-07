@@ -1,0 +1,19 @@
+# The alternative ADR-004 weighs, kept as a profile so a load run can switch to it with a flag
+# instead of an edit. No explicit row locks: SERIALIZABLE is asked to find the same conflicts by
+# itself, and the transactions it aborts are run again. Phase 5 is what turns the trade between
+# "one caller waits" and "one caller's work is thrown away" into numbers.
+#
+# This is a measurement configuration, not a second supported mode. The default profile is what
+# the system ships with, and nothing outside load/ runs with this one.
+spring:
+  datasource:
+    hikari:
+      transaction-isolation: TRANSACTION_SERIALIZABLE
+
+ledger:
+  concurrency:
+    ordered-locking: false
+    # Five, because an unbounded loop under contention is a queue with no admission control: the
+    # attempts pile onto the same rows that are already the bottleneck. Running out is a real
+    # outcome the load run is meant to observe, not one to configure away.
+    max-attempts: 5

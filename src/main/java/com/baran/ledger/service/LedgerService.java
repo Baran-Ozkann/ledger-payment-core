@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
+import com.baran.ledger.config.ConcurrencyPolicy;
 import com.baran.ledger.config.TraceContexts;
 import com.baran.ledger.config.TransferMetrics;
 import com.baran.ledger.domain.Account;
@@ -45,11 +46,12 @@ public class LedgerService {
     private final OutboxRepository outbox;
     private final TransferMetrics metrics;
     private final TraceContexts traces;
+    private final ConcurrencyPolicy concurrency;
     private final ObjectMapper json;
 
     LedgerService(AccountRepository accounts, TransactionRepository transactions, EntryRepository entries,
                   IdempotencyRepository idempotency, OutboxRepository outbox, TransferMetrics metrics,
-                  TraceContexts traces, ObjectMapper json) {
+                  TraceContexts traces, ConcurrencyPolicy concurrency, ObjectMapper json) {
         this.accounts = accounts;
         this.transactions = transactions;
         this.entries = entries;
@@ -57,6 +59,7 @@ public class LedgerService {
         this.outbox = outbox;
         this.metrics = metrics;
         this.traces = traces;
+        this.concurrency = concurrency;
         this.json = json;
     }
 
@@ -254,8 +257,15 @@ public class LedgerService {
      * by id rather than by role is the whole point: two opposing transfers between the same pair
      * ask for the same locks in the same sequence, so one waits instead of the two deadlocking.
      * A reversal takes the same route for the same reason.
+     *
+     * <p>The one configuration that skips this is the ADR-004 comparison, where SERIALIZABLE is
+     * asked to find the same conflicts by itself. Skipping the locks does not weaken I4: the debit
+     * is still a conditional UPDATE and the CHECK constraint is still on the column.
      */
     private void lockInIdOrder(List<Long> accountIds) {
+        if (!concurrency.locksInIdOrder()) {
+            return;
+        }
         accountIds.stream().sorted().forEach(accounts::lock);
     }
 

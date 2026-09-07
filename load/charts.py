@@ -56,6 +56,11 @@ def nice_ceiling(value: float) -> float:
     return 10 * magnitude
 
 
+def format_count(value: float) -> str:
+    """Backends and connections are whole things; half a connection is not a reading."""
+    return f"{value:,.0f}"
+
+
 def format_number(value: float) -> str:
     if value >= 1000:
         return f"{value:,.0f}"
@@ -120,7 +125,14 @@ class Panel:
         return "".join(parts)
 
     def columns(self, series, colours, names):
-        """Grouped columns, capped at 24px, 4px rounded cap, 2px of surface between neighbours."""
+        """Grouped columns, capped at 24px, 4px rounded cap, 2px of surface between neighbours.
+
+        Only the peak of each series and its last step carry a printed value. A number on every
+        column is unreadable and goes unread; the axis carries the rest, and RESULTS.md carries
+        all of it exactly.
+        """
+        labelled = {(position, values.index(max(values))) for position, values in enumerate(series)}
+        labelled |= {(position, len(self.labels) - 1) for position in range(len(series))}
         parts = []
         for index in range(len(self.labels)):
             start, step = self.band(index)
@@ -139,8 +151,9 @@ class Panel:
                     f'V{top + height:.1f} Z" fill="{colours[position]}">'
                     f'<title>{escape(names[position])} at {escape(self.labels[index])}: '
                     f'{escape(format_number(value))}</title></path>')
-                parts.append(text(x + thickness / 2, top - 6, format_number(value), 10,
-                                  INK_SOFT, "middle"))
+                if (position, index) in labelled:
+                    parts.append(text(x + thickness / 2, top - 6, format_number(value), 10,
+                                      INK_SOFT, "middle"))
         return "".join(parts)
 
     def line(self, values, colour, name, dash=None):
@@ -156,13 +169,19 @@ class Panel:
         return "".join(parts)
 
     def series_over_time(self, points, colour, name, start, end):
-        """A time series drawn across the panel, x mapped from wall clock rather than from bands."""
-        if not points:
+        """A time series drawn across the panel, x mapped from wall clock rather than from bands.
+
+        Samples outside the window are dropped rather than clamped to the edge. Prometheus is asked
+        a minute either side of the ramp, and clamping stacked all of that minute onto the first
+        pixel, which drew a vertical stroke that looked like a spike and was an artefact.
+        """
+        inside = [(at, value) for at, value in points if start <= at <= end]
+        if not inside:
             return ""
         span = max(end - start, 1)
         path = []
-        for index, (at, value) in enumerate(points):
-            x = self.left + self.width * min(max((at - start) / span, 0), 1)
+        for index, (at, value) in enumerate(inside):
+            x = self.left + self.width * (at - start) / span
             path.append(f"{'M' if index == 0 else 'L'}{x:.1f} {self.y(value):.1f}")
         return (f'<path d="{" ".join(path)}" fill="none" stroke="{colour}" stroke-width="2" '
                 f'stroke-linejoin="round"><title>{escape(name)}</title></path>')
@@ -256,11 +275,12 @@ def chart_latency(results):
         parts.append(panel.line([row["p50"] for row in rows[name]], colour, "p50"))
         parts.append(panel.line([row["p95"] for row in rows[name]], colour, "p95", dash="6 4"))
         parts.append(panel.line([row["p99"] for row in rows[name]], colour, "p99", dash="2 3"))
+        # One label per panel, on the extreme. At 400 VUs scenario H's p50 and p99 are within
+        # three percent of each other, so labelling both would put two strings on one pixel row;
+        # nudging them apart would detach each from its line. The table below carries every value.
         last = rows[name][-1]
-        parts.append(text(64 + index * 420 + 336, panel.y(last["p99"]) + 4,
-                          f"p99 {format_number(last['p99'])}", 10, INK_SOFT))
-        parts.append(text(64 + index * 420 + 336, panel.y(last["p50"]) + 4,
-                          f"p50 {format_number(last['p50'])}", 10, INK_SOFT))
+        parts.append(text(panel.left + panel.width, panel.y(last["p99"]) - 8,
+                          f"p99 {format_number(last['p99'])} ms at 400 VU", 10, INK_SOFT, "end"))
     parts.append('<line x1="64" y1="404" x2="94" y2="404" stroke="' + INK_SOFT + '" stroke-width="2"/>')
     parts.append(text(100, 408, "p50", 11, INK_SOFT))
     parts.append('<line x1="140" y1="404" x2="170" y2="404" stroke="' + INK_SOFT
@@ -302,25 +322,27 @@ def chart_saturation(result, title, subtitle):
     start, end = result["startedAt"], result["endedAt"]
     pool_active = series_of(result, "hikaricp_connections_active")
     pool_pending = series_of(result, "hikaricp_connections_pending")
+    pool_max = max([value for _, value in series_of(result, "hikaricp_connections_max")] or [10])
     waiting = [(row["at"] / 1000.0, row["waitingOnLock"]) for row in result["postgres"]["activity"]]
     lag = series_of(result, "ledger_outbox_lag_seconds")
 
     rows = [
-        ("Pool connections in use (max 10)", [(pool_active, BLUE, "active")], 10.0),
+        (f"Pool connections in use (max {format_count(pool_max)})",
+         [(pool_active, BLUE, "active")], pool_max, format_count),
         ("Threads queued for a connection", [(pool_pending, ORANGE, "pending")],
-         nice_ceiling(max([value for _, value in pool_pending] or [1]))),
+         nice_ceiling(max([value for _, value in pool_pending] or [1])), format_count),
         ("Backends waiting on a row lock", [(waiting, AQUA, "waiting on Lock")],
-         nice_ceiling(max([value for _, value in waiting] or [1]))),
+         max(nice_ceiling(max([value for _, value in waiting] or [1])), 2.0), format_count),
         ("Outbox lag (seconds)", [(lag, YELLOW, "oldest unpublished row")],
-         nice_ceiling(max([value for _, value in lag] or [1]))),
+         nice_ceiling(max([value for _, value in lag] or [1])), format_count),
     ]
 
     parts = [text(24, 30, title, 15, INK, weight="600"), text(24, 48, subtitle, 11, INK_SOFT)]
     warmup, step = result["k6"]["warmupSeconds"], result["k6"]["stepSeconds"]
-    for index, (label, series, top) in enumerate(rows):
-        panel = Panel(180, 78 + index * 122, 660, 88, top, [""])
+    for index, (label, series, top, formatter) in enumerate(rows):
+        panel = Panel(180, 78 + index * 122, 660, 88, top, [""], ticks=2)
         parts.append(text(172, 78 + index * 122 + 46, label, 11, INK_SOFT, "end"))
-        parts.append(panel.axes("", format_number))
+        parts.append(panel.axes("", formatter))
         for boundary, vus in enumerate(result["k6"]["steps"]):
             at = start + warmup + boundary * step
             x = panel.left + panel.width * (at - start) / max(end - start, 1)

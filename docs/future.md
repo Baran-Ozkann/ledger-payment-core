@@ -101,3 +101,48 @@ the Prometheus side and `traceToMetrics` wiring in the Grafana datasource, and i
 next step now that the trace and the metric exist for the same request. It was left out of Phase 4
 because the phase's deliverable is that both signals exist and are correct; joining them is a
 convenience on top, and one more thing to get wrong in a dashboard nobody has used yet.
+
+## The relay's drain rate under load — measured in Phase 5
+
+Phase 5 measured the relay publishing about **50 events per second** while the ledger wrote about
+**700**, ending an eleven-minute ramp 442 718 rows behind with `ledger_outbox_lag_seconds` at 602.
+The events are not lost — `published_at IS NULL` cannot be outrun and the backlog drains once the
+load stops — but a consumer reading the projection is ten minutes stale for as long as the load
+lasts, and nothing in the system says so except that gauge.
+
+The cause is not the relay's design so much as its budget. It is one scheduled method taking a
+hundred rows and awaiting each send in turn, and it competes for a connection out of the same pool
+of ten as the request threads. At 400 VUs there are 190 request threads queued in front of it, so
+it gets roughly one slot's worth of the pool and publishes at a fourteenth of the arrival rate.
+
+Three things could move it, in increasing order of how much they give up:
+
+- **A connection pool of its own.** The cheapest, and it changes no guarantee: the relay stops
+  queueing behind request threads. It also takes connections away from the ledger, which on this
+  hardware is the thing already at its ceiling.
+- **Pipelining the batch** instead of awaiting each send. Kafka's producer is asynchronous and the
+  waiting is what makes the batch slow. Per-account ordering survives only if the futures of one
+  aggregate id are still resolved in order, which is more bookkeeping than it sounds.
+- **A horizontally scaled relay**, which is out of scope by name and would need sharding by
+  `hashtext(aggregate_id)` first — see the ADR-003 material above.
+
+None of it was done in Phase 5, which measures rather than optimises. The number belongs in the
+README's honest-limits section either way.
+
+## The metrics endpoint is unavailable exactly when it matters — Phase 5
+
+Under the hot-account scenario at 200 VUs and above, the application stopped answering
+`/actuator/prometheus` altogether: 49 of 133 scrapes failed, all of them from the moment the 200 VU
+step began, with `scrape_duration_seconds` climbing to the 5 s timeout. All 200 Tomcat worker
+threads were blocked waiting for one of the ten pool connections, so no thread was left to serve
+the scrape. The signal that says "the system is saturated" is the first thing saturation takes
+away.
+
+Phase 5 could report the run anyway only because the database-side sampler is a psql session inside
+the container that owes the application nothing. That redundancy was luck of the harness design,
+not a property of the system.
+
+The usual fix is a separate management port with its own small connector, so actuator traffic never
+shares a thread pool with request traffic. It is one property, it changes no invariant, and it was
+deliberately not added mid-phase: Phase 5's job was to find this, and changing the thing being
+measured while measuring it is how a load test stops meaning anything.

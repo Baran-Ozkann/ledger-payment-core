@@ -294,27 +294,42 @@ def chart_latency(results):
 
 
 def chart_isolation(results):
-    pairs = [("Scenario U", "u-read-committed", "u-serializable", BLUE),
-             ("Scenario H", "h-read-committed", "h-serializable", ORANGE)]
+    """Two panels, one per scenario, each comparing the two concurrency strategies.
+
+    Hue carries the strategy here and the panel title carries the scenario, because the strategy
+    is what this chart is about. Throughput alone would flatter SERIALIZABLE badly - in scenario H
+    it refuses three requests in five - so the refusal rate is printed under each panel rather than
+    left for the reader to find in a table.
+    """
+    pairs = [("Scenario U - random pairs", "u-read-committed", "u-serializable"),
+             ("Scenario H - one shared account", "h-read-committed", "h-serializable")]
     tables = {name: step_table(result) for name, result in results.items()}
     labels = [f"{row['vus']}" for row in tables["u-read-committed"]]
     top = nice_ceiling(max(row["tps"] for table in tables.values() for row in table))
 
     parts = [text(24, 30, "What SERIALIZABLE with a retry loop costs", 15, INK, weight="600"),
-             text(24, 48, "Committed transfers per second; same scale in both panels",
+             text(24, 48, "Transfers that committed, per second. Same scale in both panels; VUs along the bottom",
                   11, INK_SOFT)]
-    for index, (title, ordered, serializable, colour) in enumerate(pairs):
-        panel = Panel(64 + index * 420, 78, 330, 280, top, labels)
-        parts.append(text(64 + index * 420, 70, title, 12, INK, weight="600"))
+    for index, (title, ordered, serializable) in enumerate(pairs):
+        panel = Panel(64 + index * 420, 82, 330, 268, top, labels)
+        parts.append(text(64 + index * 420, 74, title, 12, INK, weight="600"))
         parts.append(panel.axes("tx/s" if index == 0 else ""))
         parts.append(panel.columns(
             [[row["tps"] for row in tables[ordered]], [row["tps"] for row in tables[serializable]]],
-            [colour, AQUA], ["ordered locking", "SERIALIZABLE"]))
-    parts.append(legend(64, 408, [("READ COMMITTED, ordered locking", BLUE),
-                                  ("SERIALIZABLE with retries", AQUA)]))
-    parts.append(text(430, 408, "(scenario H keeps its own hue for the ordered-locking bars)",
-                      10, INK_SOFT))
-    return document(880, 430, "".join(parts), "READ COMMITTED against SERIALIZABLE, both scenarios")
+            [BLUE, ORANGE], ["ordered locking", "SERIALIZABLE"]))
+
+        requests = sum(row["requests"] for row in tables[serializable])
+        refused = sum(row["rejected"] for row in tables[serializable])
+        parts.append(text(64 + index * 420, 390,
+                          f"SERIALIZABLE refused {refused:,} of {requests:,} "
+                          f"({100 * refused / requests:.1f}%)", 11, INK_SOFT))
+        kept = sum(row["requests"] for row in tables[ordered])
+        parts.append(text(64 + index * 420, 406,
+                          f"ordered locking refused 0 of {kept:,}", 11, INK_SOFT))
+    parts.append(legend(64, 368, [("READ COMMITTED with ordered locking", BLUE),
+                                  ("SERIALIZABLE with up to five attempts", ORANGE)]))
+    return document(880, 424, "".join(parts),
+                    "READ COMMITTED with ordered locking against SERIALIZABLE with retries")
 
 
 def chart_saturation(result, title, subtitle):

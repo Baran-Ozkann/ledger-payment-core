@@ -146,3 +146,56 @@ The usual fix is a separate management port with its own small connector, so act
 shares a thread pool with request traffic. It is one property, it changes no invariant, and it was
 deliberately not added mid-phase: Phase 5's job was to find this, and changing the thing being
 measured while measuring it is how a load test stops meaning anything.
+
+## The application connects to PostgreSQL as a superuser — found in Phase 5
+
+`POSTGRES_USER: ledger` in the compose file makes `ledger` the cluster superuser, because that is
+what the `postgres` image does with the user it is told to create. The application then connects as
+that role. Verified: `rolsuper`, `rolcreatedb`, `rolcreaterole` and `rolbypassrls` are all true.
+
+This matters beyond the usual least-privilege argument, because CLAUDE.md specifies I5's
+enforcement as "Trigger that RAISEs **+ DB role grants**", and the second half does not exist. The
+role holds UPDATE, DELETE and TRUNCATE on `ledger_entries`, so the trigger is the only thing
+standing between the application and mutable history — and a superuser can remove that too. This
+was demonstrated and rolled back:
+
+```
+BEGIN;
+ALTER TABLE ledger_entries DISABLE TRIGGER USER;   -- succeeds
+-- 4 triggers now disabled: I1, I5, I7 and I8 all switched off in one statement
+ROLLBACK;
+```
+
+A bug in the application, not an attacker, is the likely path: any code that reaches `JdbcClient`
+with the wrong SQL has the rights to do this.
+
+The fix is two roles rather than one:
+
+- **An owner role** that runs migrations and owns the tables. Flyway needs DDL; nothing else does.
+- **An application role** that is not a superuser and holds exactly `SELECT, INSERT` on
+  `ledger_entries`, `ledger_transactions` and `outbox_events`, plus `UPDATE` on `accounts.balance`
+  for the conditional debit, and nothing on anything else. `REVOKE UPDATE, DELETE, TRUNCATE ON
+  ledger_entries` is the line that turns I5's second defense from a sentence in CLAUDE.md into a
+  fact.
+
+It is deliberately not done inside Phase 5. It changes how every connection in the project
+authenticates — the test containers, the load harness and the compose stack all assume one role —
+so it needs its own change and its own full test pass rather than being appended to a phase whose
+measurements are already recorded.
+
+## The application listens on every interface — found in Phase 5
+
+Spring Boot leaves `server.address` unset, so the ledger binds `0.0.0.0:8080`. It has no
+authentication by design (CLAUDE.md puts auth out of scope), and it moves money. On the machine
+Phase 5 ran on, Windows Firewall carries enabled inbound Allow rules for `java.exe` and
+`OpenJDK Platform binary` on the Public profile, and `GET http://<lan-address>:8080/actuator/prometheus`
+returned 200 from a non-loopback address. So this is reachable in practice, not only in principle.
+
+`server.address: 127.0.0.1` is the one-line version and it breaks Phase 4: Prometheus scrapes
+`host.docker.internal:8080` from inside a container, which arrives on the host's gateway address
+rather than on loopback. The two requirements genuinely conflict while the application runs on the
+host and its observability runs in Docker.
+
+Moving the application into the compose stack resolves both at once, and is already planned above
+for Phase 6: on the compose network Prometheus reaches it by service name, and no host port has to
+be published at all. Until then the exposure stands and is worth knowing about.

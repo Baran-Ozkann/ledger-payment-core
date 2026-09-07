@@ -36,8 +36,28 @@
   400 VU median to zero), and the in-container sampler survived `kill()` of its exec client and
   went on querying into the next run
 
+- [x] All four runs measured, `load/charts/*.svg` generated and `load/RESULTS.md` written.
+  U saturates at 50 VUs / 374 tx/s on the connection pool; H reaches 68 tx/s, 5.5x slower, on one
+  row. SERIALIZABLE is 10% faster without contention and refuses 59% of requests with it
+
+## Security work, requested mid-phase and outside the phase definition
+- [x] Compose published every port on 0.0.0.0 and [::]; now 127.0.0.1 only, verified after applying
+- [x] The request body was buffered unbounded before the idempotency hash. A single 400 MB POST
+  against a 256 MB heap produced an OutOfMemoryError from an endpoint needing no credentials.
+  Capped at 64 KB with a 413, `RequestSizeTest` covers both halves
+- [x] CI token restricted to `contents: read`; the load harness validates `--name` before it
+  reaches a SQL literal
+
 ## In progress
-- The four measured runs (u/h x read-committed/serializable), then charts and `load/RESULTS.md`
+- Nothing. The phase is complete; the branch is ready for audit
 
 ## Blocked / open questions
-- Nothing new. The `spring-boot-starter-opentelemetry` sign-off from phase 4 is still outstanding
+- The `spring-boot-starter-opentelemetry` sign-off from phase 4 is still outstanding
+- **The application connects to PostgreSQL as a superuser.** It can disable the triggers enforcing
+  I1, I5, I7 and I8 in one statement, demonstrated and rolled back. CLAUDE.md specifies I5 as
+  "Trigger that RAISEs + DB role grants" and the grants half does not exist. The fix is two roles
+  and it changes how every connection in the project authenticates, so it needs its own change and
+  its own test pass rather than being appended here. Written up in `docs/future.md`
+- **The application listens on 0.0.0.0:8080** with no authentication. Binding it to loopback breaks
+  the phase 4 Prometheus scrape; moving the app into compose fixes both and is already the phase 6
+  plan. Written up in `docs/future.md`

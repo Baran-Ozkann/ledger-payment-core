@@ -5,8 +5,12 @@ services:
       POSTGRES_DB: ledger
       POSTGRES_USER: ledger
       POSTGRES_PASSWORD: ledger
+    # Bound to loopback, like every published port in this file. Nothing here is hardened for a
+    # network to reach: the database trusts a password of "ledger" and Grafana lets an anonymous
+    # visitor in as Admin. Without the 127.0.0.1 prefix Docker publishes on 0.0.0.0 and on [::],
+    # so a laptop on a cafe network is offering all of it to the room.
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -32,7 +36,7 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       CLUSTER_ID: ledger-local-cluster-0001
     ports:
-      - "${KAFKA_PORT:-9092}:9092"
+      - "127.0.0.1:${KAFKA_PORT:-9092}:9092"
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:
@@ -52,8 +56,8 @@ services:
       - source: tempo
         target: /etc/tempo.yml
     ports:
-      - "${TEMPO_OTLP_HTTP_PORT:-4318}:4318"
-      - "${TEMPO_PORT:-3200}:3200"
+      - "127.0.0.1:${TEMPO_OTLP_HTTP_PORT:-4318}:4318"
+      - "127.0.0.1:${TEMPO_PORT:-3200}:3200"
     volumes:
       - tempo-data:/var/tempo
 
@@ -68,7 +72,7 @@ services:
       - source: prometheus
         target: /etc/prometheus/prometheus.yml
     ports:
-      - "${PROMETHEUS_PORT:-9090}:9090"
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
     extra_hosts:
       # Named automatically on Docker Desktop, but not on a Linux daemon, and the scrape target is
       # the host either way.
@@ -79,14 +83,16 @@ services:
   grafana:
     image: grafana/grafana:12.0.2
     environment:
-      # A local stack with nothing private in it. A login screen between the reviewer and the
-      # dashboard would buy nothing and cost the first ten minutes of the quick start.
+      # A login screen between the reviewer and the dashboard would buy nothing and cost the
+      # first ten minutes of the quick start. What makes that true rather than merely convenient
+      # is the loopback binding below: anonymous Admin is only safe while the only thing that can
+      # reach port 3000 is this machine. Publish this port more widely and this has to change.
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
       GF_AUTH_DISABLE_LOGIN_FORM: "true"
       GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
     ports:
-      - "${GRAFANA_PORT:-3000}:3000"
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
     volumes:
       - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./ops/grafana/dashboards:/var/lib/grafana/dashboards:ro

@@ -15,7 +15,8 @@ public enum LedgerError {
     MISSING_IDEMPOTENCY_KEY("missing_idempotency_key", "The Idempotency-Key header is required"),
     IDEMPOTENCY_KEY_REUSE("idempotency_key_reuse", "This key was used for a different request"),
     TRANSACTION_ALREADY_REVERSED("transaction_already_reversed", "This transaction has already been reversed"),
-    INVALID_PAGE_SIZE("invalid_page_size", "Page size is out of range");
+    INVALID_PAGE_SIZE("invalid_page_size", "Page size is out of range"),
+    REQUEST_TOO_LARGE("request_too_large", "Request body exceeds the maximum size");
 
     private final String code;
     private final String title;

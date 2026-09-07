@@ -12,6 +12,7 @@ pg_stat_activity and pg_stat_database while the ramp ran, and the matching Prome
 import argparse
 import json
 import os
+import re
 import pathlib
 import shutil
 import signal
@@ -289,6 +290,12 @@ def main() -> int:
     parser.add_argument("--accounts", type=int, default=10_000)
     parser.add_argument("--jar", default=str(PROJECT / "target" / "ledger-0.0.1-SNAPSHOT.jar"))
     arguments = parser.parse_args()
+
+    # The name reaches psql inside a quoted SQL literal, so it is checked rather than escaped.
+    # Nobody hostile is passing this argument, but a name with an apostrophe in it would produce a
+    # confusing syntax error at best, and this script is the template anyone copies.
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", arguments.name):
+        raise SystemExit("--name must be 1-64 characters of letters, digits, dot, dash or underscore")
 
     RESULTS.mkdir(exist_ok=True)
     run_id = f"{arguments.name}-{int(time.time())}"

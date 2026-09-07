@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
 
+# Read-only. Nothing in this workflow writes to the repository, and the default token is broader
+# than that; a build step that is compromised should not be able to push with it.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest

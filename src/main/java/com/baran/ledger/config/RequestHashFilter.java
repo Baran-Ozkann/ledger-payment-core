@@ -20,8 +20,12 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+
+import com.baran.ledger.domain.LedgerError;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
@@ -35,11 +39,20 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>The method and the path are hashed with the body. Without them one key would collide across
  * two different endpoints and a transfer could be answered with a funding's stored response.
+ *
+ * <p>The read is bounded. Hashing needs the whole body in memory, and an unbounded read of an
+ * unauthenticated request is a way to spend the heap from outside: a single 400 MB POST against a
+ * 256 MB heap produced an OutOfMemoryError before this limit existed. The cap is far above any
+ * real request here - the largest this API accepts is a few hundred bytes - so nothing legitimate
+ * meets it.
  */
 @Component
 public class RequestHashFilter extends OncePerRequestFilter {
 
     public static final String REQUEST_HASH = "ledger.requestHash";
+
+    /** Three orders of magnitude above the largest real request, and still bounded. */
+    public static final int MAX_BODY_BYTES = 64 * 1024;
 
     private final ObjectMapper json = JsonMapper.builder().build();
 
@@ -51,9 +64,32 @@ public class RequestHashFilter extends OncePerRequestFilter {
             return;
         }
 
-        CachedBodyRequest cached = new CachedBodyRequest(request);
+        CachedBodyRequest cached;
+        try {
+            cached = new CachedBodyRequest(request);
+        } catch (BodyTooLarge tooLarge) {
+            reject(response);
+            return;
+        }
         cached.setAttribute(REQUEST_HASH, hash(cached));
         chain.doFilter(cached, response);
+    }
+
+    /**
+     * Written here rather than raised for the controller advice, because a filter sits outside the
+     * dispatcher and no advice will ever see what it throws. The shape is the same RFC 7807 body
+     * the rest of the API answers with, and the code comes from the same enum, so a client matches
+     * on one field whichever layer refused it.
+     */
+    private void reject(HttpServletResponse response) throws IOException {
+        LedgerError error = LedgerError.REQUEST_TOO_LARGE;
+        response.setStatus(HttpStatus.CONTENT_TOO_LARGE.value());
+        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.getWriter().write(json.writeValueAsString(Map.of(
+                "type", "urn:ledger:" + error.code(),
+                "title", error.title(),
+                "status", HttpStatus.CONTENT_TOO_LARGE.value())));
     }
 
     private String hash(CachedBodyRequest request) {
@@ -95,13 +131,23 @@ public class RequestHashFilter extends OncePerRequestFilter {
         }
     }
 
+    /** Not a LedgerException: nothing downstream of a filter can translate one. */
+    private static final class BodyTooLarge extends IOException {
+    }
+
     private static final class CachedBodyRequest extends HttpServletRequestWrapper {
 
         private final byte[] body;
 
         private CachedBodyRequest(HttpServletRequest request) throws IOException {
             super(request);
-            this.body = request.getInputStream().readAllBytes();
+            // One byte past the limit is enough to know it was exceeded, and is all that is ever
+            // held: readNBytes stops there rather than following the stream wherever it goes.
+            byte[] read = request.getInputStream().readNBytes(MAX_BODY_BYTES + 1);
+            if (read.length > MAX_BODY_BYTES) {
+                throw new BodyTooLarge();
+            }
+            this.body = read;
         }
 
         @Override

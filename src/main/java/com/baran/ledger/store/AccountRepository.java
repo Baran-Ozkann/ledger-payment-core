@@ -68,8 +68,9 @@ public class AccountRepository {
                 .update();
     }
 
-    public int credit(long accountId, long amount) {
-        return jdbc.sql("UPDATE accounts SET balance = balance + ? WHERE id = ?")
+    /** No return value, unlike debit: a credit has no condition that could refuse it. */
+    public void credit(long accountId, long amount) {
+        jdbc.sql("UPDATE accounts SET balance = balance + ? WHERE id = ?")
                 .params(amount, accountId)
                 .update();
     }

@@ -24,8 +24,9 @@ public class IdempotencyRepository {
      * "another request owns this key", not an error. A concurrent claimer blocks here until the
      * first one commits or rolls back, which is what makes the winner unambiguous.
      *
-     * <p>The expiry is stamped by the database clock that stamps created_at. Nothing reads it yet;
-     * the sweeper that will is recorded in docs/future.md.
+     * <p>The expiry is stamped by the database clock that stamps created_at, and it is what
+     * IdempotencyKeyCleanupJob acts on. Deleting a key means a retry of that request executes a
+     * second time, so 24 hours is a statement about how late a client may retry.
      */
     public Optional<Long> claim(IdempotencyRequest request) {
         return jdbc.sql("""

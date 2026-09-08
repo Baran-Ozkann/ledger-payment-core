@@ -5,7 +5,11 @@ spring:
     # 127.0.0.1, not localhost. Every published port binds IPv4 loopback only, and on Windows
     # localhost resolves to ::1 first, so a name here costs a failed connection and its two
     # second timeout on every attempt. Measured: 2049 ms per request against 14 ms.
-    url: jdbc:postgresql://127.0.0.1:5432/ledger
+    #
+    # 5433 is where compose publishes the container, and it is deliberately not 5432: a machine with
+    # its own PostgreSQL answers there, and a run pointed at the wrong instance looks entirely
+    # reasonable and means nothing. The compose profile ignores this line and uses the service name.
+    url: jdbc:postgresql://127.0.0.1:5433/ledger
     # Not the owner, and not a superuser. It holds exactly the verbs the code issues and cannot
     # UPDATE or DELETE a ledger entry, which is the second of I5's two defenses; disabling the
     # trigger that is the first one needs table ownership it does not have. See V12.
@@ -94,8 +98,10 @@ management:
     # oversight: what it serves is /actuator/health and /actuator/prometheus, both read-only, and
     # narrowing it to the Docker gateway would hard-code an address that differs on every machine.
     # It leaks operational shape - request rates, JVM internals, outbox depth - and moves nothing.
-    # It stops being exposed at all once the application becomes a compose service, which is the
-    # phase 6 plan recorded in docs/future.md.
+    #
+    # It applies to this profile alone, which is the application run on the host for a load ramp.
+    # Under the compose profile the port is not published at all, so nothing outside that network
+    # can reach it.
     port: 8081
     address: 0.0.0.0
   endpoints:

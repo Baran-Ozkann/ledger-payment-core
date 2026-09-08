@@ -34,7 +34,7 @@ import com.baran.ledger.store.TransactionRepository;
 @Service
 public class LedgerService {
 
-    public static final int MAX_PAGE_SIZE = 200;
+    private static final int MAX_PAGE_SIZE = 200;
 
     /** The code a first execution answers with, stored so that a repeat of it answers the same. */
     private static final int CREATED = 201;

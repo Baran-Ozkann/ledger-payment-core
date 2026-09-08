@@ -1,0 +1,30 @@
+# The application as a compose service. Everything it talks to is reached by service name on the
+# compose network instead of over the host's loopback, and that is the whole difference.
+#
+# It is what makes the quick start one command: `docker compose up` brings up the database, the
+# broker, the ledger and its observability together, with no JDK on the host and no ports opened
+# beyond the API on 127.0.0.1.
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/ledger
+  kafka:
+    # The broker's DOCKER listener. Its HOST listener still advertises 127.0.0.1:9092 for a
+    # process running outside compose, which is what the load harness and the tests use.
+    bootstrap-servers: kafka:29092
+
+management:
+  server:
+    # Reachable only from the compose network: the port is not published, so the exposure the
+    # default profile accepts knowingly does not exist here at all.
+    address: 0.0.0.0
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: http://tempo:4318/v1/traces
+
+server:
+  # Every interface of the container, which is not every interface of the host: compose publishes
+  # this port on 127.0.0.1 only. Binding loopback inside the container would refuse the published
+  # port's own traffic, since it arrives on the container's ethernet address.
+  address: 0.0.0.0

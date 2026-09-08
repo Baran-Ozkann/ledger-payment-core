@@ -1,0 +1,10 @@
+# The build stage compiles from src/, so anything already built on the host is context to upload
+# and then ignore. load/results/ alone is tens of megabytes of measurement output.
+target/
+load/results/
+load/charts/
+docs/images/
+.git/
+.github/
+__pycache__/
+*.log

@@ -34,8 +34,10 @@ with the published host port, the server version and the cluster's system identi
 ## Running it
 
 ```bash
-# 1. the stack, with PostgreSQL out of the native instance's way
-POSTGRES_PORT=5433 docker compose up -d
+# 1. the stack, named service by service. A plain `docker compose up` would also start the
+#    ledger service and its demo seeder, and run.py starts an application of its own on the
+#    same port. PostgreSQL is published on 5433 either way.
+docker compose up -d postgres kafka tempo prometheus grafana
 
 # 2. the application under test, packaged - not mvn spring-boot:run, which would leave
 #    Maven competing for the same cores as the thing being measured
@@ -55,7 +57,9 @@ python load/run.py --name u-read-committed --scenario u --pg-port 5433 --reseed
 ```
 
 `run.py` starts and stops the application itself. Nothing should be listening on 8080
-when it begins.
+when it begins, which is why step 1 names its services rather than starting everything.
+Prometheus carries a scrape target for each of the two places the application can run; the
+one that is not running shows as down.
 
 The application answers the API on **127.0.0.1:8080** and actuator on **8081**: the ledger
 has no authentication and moves money, so it is not on the network, while the two read-only

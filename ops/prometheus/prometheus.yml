@@ -1,9 +1,13 @@
-# The application is not a compose service: it runs on the host so it can be restarted, debugged
-# and profiled without a rebuild. Everything that observes it runs here instead.
+# Two targets for one application, because it runs in two places and only ever one at a time.
 #
-# Port 8081, not 8080. The ledger API answers on loopback only, because it moves money and has no
-# authentication; its management connector is the half that is reachable from here, and it serves
-# two read-only endpoints.
+# `docker compose up` runs it as the `ledger` service and it is reached by service name. The load
+# harness runs it on the host instead, packaged, so that Maven and the JVM under test are not
+# competing for the same cores as k6; that instance is reached through the host gateway.
+#
+# Port 8081, not 8080, in both cases. The ledger API answers on loopback only - it moves money and
+# has no authentication - while the management connector serves two read-only endpoints and is the
+# half that anything outside the process is allowed to reach. Whichever instance is not running
+# shows as a target that is down, which is the honest reading of "it is not there".
 global:
   scrape_interval: 5s
   evaluation_interval: 5s
@@ -12,4 +16,9 @@ scrape_configs:
   - job_name: ledger
     metrics_path: /actuator/prometheus
     static_configs:
+      - targets: ["ledger:8081"]
+        labels:
+          instance_kind: compose
       - targets: ["host.docker.internal:8081"]
+        labels:
+          instance_kind: host

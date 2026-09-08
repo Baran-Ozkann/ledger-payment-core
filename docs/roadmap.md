@@ -49,7 +49,7 @@ Have the entire infrastructure standing and CI green before any real code is wri
 
 ### The CI rule guard
 
-`CLAUDE.md` is only intent until CI enforces it. Add this as a step in the workflow, before `mvn verify`:
+`CONVENTIONS.md` is only intent until CI enforces it. Add this as a step in the workflow, before `mvn verify`:
 
 ```bash
 #!/usr/bin/env bash
@@ -94,7 +94,7 @@ deny "TODO/FIXME left in source" \
 
 deny "AI tool reference in committed content" \
   -iE 'co-authored-by|generated (by|with)|anthropic|copilot|chatgpt' \
-  --exclude='CLAUDE.md' --exclude='PHASES.md' --exclude='PROGRESS.md' \
+  --exclude='CONVENTIONS.md' --exclude='roadmap.md' --exclude='PROGRESS.md' \
   src docs README.md
 
 deny "JPA/Hibernate dependency present" \

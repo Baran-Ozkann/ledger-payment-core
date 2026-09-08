@@ -153,7 +153,7 @@ measured while measuring it is how a load test stops meaning anything.
 what the `postgres` image does with the user it is told to create. The application then connects as
 that role. Verified: `rolsuper`, `rolcreatedb`, `rolcreaterole` and `rolbypassrls` are all true.
 
-This matters beyond the usual least-privilege argument, because CLAUDE.md specifies I5's
+This matters beyond the usual least-privilege argument, because CONVENTIONS.md specifies I5's
 enforcement as "Trigger that RAISEs **+ DB role grants**", and the second half does not exist. The
 role holds UPDATE, DELETE and TRUNCATE on `ledger_entries`, so the trigger is the only thing
 standing between the application and mutable history — and a superuser can remove that too. This
@@ -175,7 +175,7 @@ The fix is two roles rather than one:
 - **An application role** that is not a superuser and holds exactly `SELECT, INSERT` on
   `ledger_entries`, `ledger_transactions` and `outbox_events`, plus `UPDATE` on `accounts.balance`
   for the conditional debit, and nothing on anything else. `REVOKE UPDATE, DELETE, TRUNCATE ON
-  ledger_entries` is the line that turns I5's second defense from a sentence in CLAUDE.md into a
+  ledger_entries` is the line that turns I5's second defense from a sentence in CONVENTIONS.md into a
   fact.
 
 It is deliberately not done inside Phase 5. It changes how every connection in the project
@@ -186,7 +186,7 @@ measurements are already recorded.
 ## The application listens on every interface — found in Phase 5
 
 Spring Boot leaves `server.address` unset, so the ledger binds `0.0.0.0:8080`. It has no
-authentication by design (CLAUDE.md puts auth out of scope), and it moves money. On the machine
+authentication by design (CONVENTIONS.md puts auth out of scope), and it moves money. On the machine
 Phase 5 ran on, Windows Firewall carries enabled inbound Allow rules for `java.exe` and
 `OpenJDK Platform binary` on the Public profile, and `GET http://<lan-address>:8080/actuator/prometheus`
 returned 200 from a non-loopback address. So this is reachable in practice, not only in principle.

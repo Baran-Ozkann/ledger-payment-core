@@ -1,4 +1,4 @@
-# CLAUDE.md — Ledger Payment Core
+# CONVENTIONS.md — Ledger Payment Core
 
 Read this file at the start of every session. These rules have no exceptions.
 

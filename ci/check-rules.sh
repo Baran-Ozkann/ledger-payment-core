@@ -40,7 +40,7 @@ deny "TODO/FIXME left in source" \
 
 deny "AI tool reference in committed content" \
   -iE 'co-authored-by|generated (by|with)|anthropic|copilot|chatgpt' \
-  --exclude='CLAUDE.md' --exclude='PHASES.md' --exclude='PROGRESS.md' \
+  --exclude='CONVENTIONS.md' --exclude='roadmap.md' --exclude='PROGRESS.md' \
   src docs README.md
 
 deny "JPA/Hibernate dependency present" \

@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * I5's second defense. CLAUDE.md specifies immutability as a trigger that RAISEs <em>and</em> DB
+ * I5's second defense. CONVENTIONS.md specifies immutability as a trigger that RAISEs <em>and</em> DB
  * role grants, and until V12 only the trigger existed: the application connected as the cluster
  * superuser, which could switch every trigger off in one statement.
  *

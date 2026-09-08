@@ -54,7 +54,7 @@
 ## Blocked / open questions
 - The `spring-boot-starter-opentelemetry` sign-off from phase 4 is still outstanding
 - **The application connects to PostgreSQL as a superuser.** It can disable the triggers enforcing
-  I1, I5, I7 and I8 in one statement, demonstrated and rolled back. CLAUDE.md specifies I5 as
+  I1, I5, I7 and I8 in one statement, demonstrated and rolled back. CONVENTIONS.md specifies I5 as
   "Trigger that RAISEs + DB role grants" and the grants half does not exist. The fix is two roles
   and it changes how every connection in the project authenticates, so it needs its own change and
   its own test pass rather than being appended here. Written up in `docs/future.md`

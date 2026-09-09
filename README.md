@@ -374,7 +374,7 @@ and that is reported rather than rounded away. [ADR-004](docs/adr/004-ordered-lo
 
 ---
 
-## One trace, HTTP request to consumer
+## One trace, and the metrics beside it
 
 ![A single trace spanning the HTTP request, the outbox relay and the consumer](docs/images/trace-http-to-consumer.png)
 
@@ -388,6 +388,23 @@ Metrics exported: `ledger_transfer_duration_seconds`, `ledger_transfer_total`,
 `ledger_idempotency_hit_total`, `ledger_deadlock_retry_total` (expected to stay at zero),
 `ledger_outbox_pending`, `ledger_outbox_lag_seconds`, `ledger_balance_drift_total`,
 `ledger_cleanup_rows_deleted_total`.
+
+![The provisioned Grafana dashboard: correctness alarms at zero, the outbox backlog, and the transfer path](docs/images/grafana-dashboard.png)
+
+Those names are what the provisioned dashboard queries — Grafana at
+[127.0.0.1:3000](http://127.0.0.1:3000), no login, nothing to import. The two alarms come first
+because they are the ones that must read zero: drift is an account whose balance disagrees with the
+sum of its entries, and a deadlock loser means two accounts were locked in different orders
+somewhere. Beside them the outbox panel plots pending rows against the age of the oldest one,
+because a hundred rows a second old is a burst and one row an hour old is an outage. Below, the
+transfer path: outcomes split by result, latency quantiles taken off the histogram buckets rather
+than computed client-side, and replays answered from the idempotency store counted separately from
+the transfers they stood in for. The retention panel is flat because those jobs run once a day and
+this window is ten minutes wide.
+
+The numbers on it are a few minutes of quick-start traffic on a laptop — about one transfer a
+second, which is the demo and not a limit. What the system does under real load, and where it
+stops, is [measured above](#load-test-results).
 
 ---
 

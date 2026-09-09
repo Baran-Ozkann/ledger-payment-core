@@ -67,33 +67,54 @@ Three things in that picture carry most of the design:
 
 ## Quick start
 
-Docker is the only requirement. No JDK, no Maven — the image builds the jar itself.
+Docker is the only requirement. No JDK, no Maven — the image builds the jar itself. `demo-accounts`
+runs once, creates two accounts through the API, funds one of them, and prints a ready-to-run
+request with the ids filled in, so the step after `docker compose up` really is a single transfer.
 
-```bash
-docker compose up -d --build        # first run builds the image, a few minutes
-docker compose logs demo-accounts   # prints the transfer command, ids filled in
-```
+The whole of it, from an empty machine to a transfer that will not happen twice. A real session,
+abbreviated only where marked `...`:
 
-`demo-accounts` runs once, creates two accounts through the API, funds one of them, and prints a
-ready-to-run request. Paste it:
+```console
+$ docker compose up -d --build
+...                                     # builds the image, then waits for health checks
 
-```bash
-curl -i -X POST http://127.0.0.1:8080/v1/transfers \
-  -H 'Content-Type: application/json' \
-  -H 'X-Client-Id: demo' \
-  -H 'Idempotency-Key: first-transfer' \
-  -d '{"from_account":"<alice>","to_account":"<bob>","amount":1250,"description":"Coffee"}'
-```
+$ docker compose logs demo-accounts
+demo-accounts-1  |   The ledger is up, with two demo accounts and money in one of them.
+demo-accounts-1  |   Balances are in kurus, which is the only unit this API speaks.
+demo-accounts-1  |
+demo-accounts-1  |     alice  8f951015-9ba0-4253-ab94-cb88d789e787   1000000
+demo-accounts-1  |     bob    3e7f6a4a-deb3-4365-b5a0-5094940408a2   0
+...
 
-```
+$ curl -i -X POST http://127.0.0.1:8080/v1/transfers \
+    -H 'Content-Type: application/json' -H 'X-Client-Id: demo' \
+    -H 'Idempotency-Key: first-transfer' \
+    -d '{"from_account":"8f951015-9ba0-4253-ab94-cb88d789e787","to_account":"3e7f6a4a-deb3-4365-b5a0-5094940408a2","amount":1250,"description":"Coffee"}'
 HTTP/1.1 201
-{"id":"cabf43cf-...","tx_type":"TRANSFER","description":"Coffee","entries":[
-  {"account_id":"<alice>","amount":-1250,"currency":"TRY"},
-  {"account_id":"<bob>","amount":1250,"currency":"TRY"}]}
+Content-Type: application/json
+
+{"id":"aac18a87-e553-4a08-837f-c0a6e494d16e","tx_type":"TRANSFER","description":"Coffee","created_at":"2026-09-09T20:02:00.201978Z","entries":[{"id":3,"transaction_id":"aac18a87-e553-4a08-837f-c0a6e494d16e","account_id":"8f951015-9ba0-4253-ab94-cb88d789e787","amount":-1250,"currency":"TRY","created_at":"2026-09-09T20:02:00.201978Z"},{"id":4,"transaction_id":"aac18a87-e553-4a08-837f-c0a6e494d16e","account_id":"3e7f6a4a-deb3-4365-b5a0-5094940408a2","amount":1250,"currency":"TRY","created_at":"2026-09-09T20:02:00.201978Z"}]}
+
+$ curl -i -X POST http://127.0.0.1:8080/v1/transfers ...    # the same request, byte for byte
+HTTP/1.1 201
+Content-Type: application/json
+
+{"id": "aac18a87-e553-4a08-837f-c0a6e494d16e", "entries": [{"id": 3, "amount": -1250, ...
+
+$ curl -s http://127.0.0.1:8080/v1/accounts/3e7f6a4a-deb3-4365-b5a0-5094940408a2
+{"id":"3e7f6a4a-deb3-4365-b5a0-5094940408a2","account_type":"LIABILITY","owner_ref":"demo-bob","currency":"TRY","balance":1250,"allow_negative":false,"created_at":"2026-09-09T20:01:45.057385Z"}
 ```
 
-Run it a second time unchanged: the same `201` and the same transaction id come back, because the
-key has already been used. Change the `Idempotency-Key` and it becomes a new transfer.
+Two entries, `-1250` and `+1250`, and bob is up by 1250 rather than 2500: the second call returned
+the first call's transaction — same id, same entry ids `3` and `4`, same `created_at` — instead of
+making a second one. It is spelled differently because it is not the same document. The first
+response is what Jackson serialized; the replay is that document read back out of a `jsonb` column,
+which PostgreSQL returns with its keys reordered and a space after every colon. Equal as JSON,
+different as bytes, and the ledger behind them was written exactly once.
+
+Change the `Idempotency-Key` and it becomes a new transfer. Keep the key but change the body and it
+is refused — `422 urn:ledger:idempotency_key_reuse`, because the stored request hash no longer
+matches what was sent.
 
 | | |
 |---|---|

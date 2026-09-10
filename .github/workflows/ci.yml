@@ -16,6 +16,10 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v5
+        with:
+          # The rule check reads commit messages. The default shallow checkout hands it one
+          # commit, so a branch that pushes five at once would have four of them unread.
+          fetch-depth: 0
 
       - name: Set up JDK 21
         uses: actions/setup-java@v5

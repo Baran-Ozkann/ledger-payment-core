@@ -245,7 +245,8 @@ does not produce simultaneity.
 
 `ci/check-rules.sh` runs in CI ahead of the build and fails it on floating point in `domain` or
 `service`, `@Transactional` in a concurrency or idempotency test, a `TODO`, a JPA dependency, or an
-optimistic-locking `version` column.
+optimistic-locking `version` column. It also reads the commit range itself, and fails on an AI tool
+reference in a commit message — the one surface a check that greps the worktree cannot reach.
 
 ### Break proof
 

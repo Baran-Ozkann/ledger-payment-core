@@ -103,9 +103,9 @@ Reject self-transfers before any database write
 ```
 The subject line stands alone under ~72 characters. Add a body only when the *why* is not obvious from the diff.
 
-**Granularity.** Each phase produces **2–6 commits**. Exceed six only when the phase genuinely contains more separable units; never split artificially to reach a count, and never squash a phase into one commit.
+**Granularity.** **Each commit is one logical unit that leaves the build green.** A phase produces as many commits as it has such units. No commit is split to reach a count, and none is squashed to fall under one.
 
-Each commit is one logical unit that leaves the build green. Concretely, a phase usually splits along these lines:
+Concretely, a phase usually splits along these lines:
 - One commit per migration plus the code that first uses it
 - One commit per independent mechanism (locking, idempotency protocol, relay, consumer)
 - Tests land **with** the code they test, not as a separate "add tests" commit — a commit whose diff is only tests is a sign the earlier commit was incomplete
@@ -186,7 +186,7 @@ At the end of every phase, produce a report in exactly this structure:
 (summary of `mvn verify`: test count, duration, passed/failed)
 
 ### Commits
-(output of `git log --oneline main..HEAD` — 2–6 commits expected)
+(output of `git log --oneline main..HEAD`)
 
 ### Break proof
 (only for phases marked BREAK PROOF REQUIRED)

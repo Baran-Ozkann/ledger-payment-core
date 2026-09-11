@@ -58,6 +58,14 @@ All four measured runs used host port 5433, the PostgreSQL 16.15 container, clus
 native instance on 5432 is PostgreSQL 18 and does not share these credentials, but the check
 does not depend on that: credentials can match by accident, a cluster system identifier cannot.
 
+**All four runs connected as `ledger` — the owner role — not as `ledger_app`.** At the time they
+were taken there was one role; `V12__least_privilege_app_role.sql` has since split it, and
+`load/run.py` now points the application under test at `ledger_app`, the unprivileged role the
+system ships with. So the harness today grants less than these runs held: no `UPDATE`, `DELETE`
+or `TRUNCATE` on `ledger_entries`. The difference is a grant set rather than anything on the hot
+path — the transfer path issues no statement `ledger_app` is refused — but whether it moves a
+number here is unmeasured, because these runs were not repeated under the new role.
+
 ---
 
 ## Scenario U — uniform, READ COMMITTED with ordered locking

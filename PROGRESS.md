@@ -37,6 +37,10 @@
 - [x] README section on what a green suite did not catch: the rule guard's grep exit code, container
   reuse passing with Flyway disabled, and the deprecated OTLP property that sent zero spans while 84
   tests were green
+- [x] `load/run.py` connects as `ledger_app`, the role the application ships with, rather than the
+  `ledger` owner it inherited from before `V12`. The four runs in `load/RESULTS.md` were taken as the
+  owner and were **not** re-run: the report now says so, and says that whether the grant set moves a
+  number is unmeasured. The `docs/future.md` deferral is removed, the deferral having been taken
 - [x] `docs/future.md` trimmed to what is still future. The ADR-003 and ADR-005 drafts became those
   records; four items had been built or fixed since they were written
 - [x] Cleanup: `AccountRepository.credit` no longer returns a row count nobody read, `MAX_PAGE_SIZE`
@@ -77,12 +81,6 @@ temporary test funded the destination.
 - **Commit trailers.** The session harness asks for a `Co-Authored-By` trailer and a session link on
   every commit. `CONVENTIONS.md` forbids AI tool references in commit messages, so the repository
   rule was followed and no trailer was added. Flagged rather than decided quietly
-- **`load/run.py` still connects as the owner role.** It passes
-  `--spring.datasource.username=ledger`, which was correct before `V12` and is now the owner rather
-  than `ledger_app`. A measured run therefore holds privileges the shipped application does not. Not
-  changed here: altering the credentials a recorded measurement was taken under, without re-running
-  it, would make `load/RESULTS.md` describe a configuration that no longer exists. Written up in
-  `docs/future.md`
 - **Mutation testing (PIT) was dropped**, which the roadmap allows as the one optional item. The
   reasoning — container cost per mutant, and that a Java mutation operator cannot reach a trigger,
   a constraint or a grant — is in `docs/future.md`

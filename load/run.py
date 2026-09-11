@@ -100,8 +100,12 @@ def start_application(jar: pathlib.Path, jdbc_url: str, profiles: list[str], log
         "java",
         "-jar", str(jar),
         f"--spring.datasource.url={jdbc_url}",
-        "--spring.datasource.username=ledger",
-        "--spring.datasource.password=ledger",
+        # The unprivileged role the application ships with, not the owner: a measured run should
+        # hold exactly the grants the shipped configuration holds, or it is measuring a system
+        # that nobody deploys. Flyway keeps the owner through spring.flyway.user, which this does
+        # not touch, so migrations still run with the DDL rights they need. See V12.
+        "--spring.datasource.username=ledger_app",
+        "--spring.datasource.password=ledger_app",
     ]
     if profiles:
         command.append("--spring.profiles.active=" + ",".join(profiles))

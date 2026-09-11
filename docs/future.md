@@ -86,18 +86,3 @@ equivalent evidence for those, and they are recorded per mechanism rather than a
 If it is ever added, the honest scope is `domain` and the pure branches of `service` — `Money`, the
 V1 to V7 guards, `EntriesPage.of` — with the integration tests excluded, and the number reported as
 covering that slice rather than the system.
-
-## The load harness still connects as the owner role
-
-`load/run.py` starts the application under test with `--spring.datasource.username=ledger`, which
-was correct when there was one role and is now the *owner* rather than the unprivileged
-`ledger_app` that `V12__least_privilege_app_role.sql` introduced. A measured run therefore holds
-`UPDATE` and `DELETE` on `ledger_entries` that the application never holds in any other
-configuration.
-
-It changes no number — nothing in the transfer path issues a statement `ledger_app` would be
-refused — but it means the load harness is not exercising the privilege set the system ships with,
-and a future run could pass while the shipped configuration would not. The fix is two lines in
-`run.py`; it was left alone in Phase 6 because changing the credentials a recorded measurement was
-taken under, without re-running the measurement, makes `load/RESULTS.md` describe a configuration
-that no longer exists.

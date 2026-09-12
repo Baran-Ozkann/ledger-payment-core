@@ -6,7 +6,9 @@ identified from that database's own side, because a native PostgreSQL listening 
 happily answer a misdirected run and produce numbers that look plausible and mean nothing.
 
 Leaves load/results/<name>.json behind: the k6 per-step summary, samples taken from
-pg_stat_activity and pg_stat_database while the ramp ran, and the matching Prometheus series.
+pg_stat_activity and pg_stat_database while the ramp ran, the matching Prometheus series, and a
+count of the scrapes Prometheus got an answer to - the application's own metrics are a measurement
+that can fail under load, and a run that quietly lost half of them should say so on its face.
 """
 
 import argparse
@@ -257,6 +259,44 @@ def prometheus_range(query: str, start: float, end: float) -> dict:
         return json.loads(answer.read())["data"]["result"]
 
 
+def scrape_health(start: float, end: float) -> dict:
+    """Counts the scrapes Prometheus attempted against the application, and how many came back.
+
+    `up` is written by every scrape attempt - 1 when the target answered, 0 when it did not - so
+    counting its raw samples over the ramp window is the whole accounting: attempted, succeeded and
+    failed, with no inference. Raw samples through an instant query rather than query_range,
+    because a range query's step carries the last known value forward for five minutes and would
+    paper over exactly the gap this is here to find.
+
+    Scenario H at 200 VUs blocked all 200 Tomcat threads on ten pool connections and stopped
+    serving /actuator/prometheus; the management connector was moved to its own port afterwards.
+    Whether that worked is this block.
+    """
+    window = max(int(end - start) + 1, 1)
+    samples = {}
+    for name in ("up", "scrape_duration_seconds"):
+        query = f'{name}{{job="ledger", instance_kind="host"}}[{window}s]'
+        parameters = urllib.parse.urlencode({"query": query, "time": f"{end:.0f}"})
+        with urllib.request.urlopen(f"{PROMETHEUS}/api/v1/query?{parameters}", timeout=60) as answer:
+            series = json.loads(answer.read())["data"]["result"]
+        samples[name] = [[at, float(value)]
+                         for one in series for at, value in one.get("values", [])
+                         if start <= at <= end]
+
+    attempted = len(samples["up"])
+    succeeded = sum(1 for _, value in samples["up"] if value == 1.0)
+    return {
+        "instance": "host",
+        "attempted": attempted,
+        "succeeded": succeeded,
+        "failed": attempted - succeeded,
+        # Offsets from the start of the ramp, so a failure can be read against the step it fell in.
+        "up": [[round(at - start, 1), value] for at, value in samples["up"]],
+        "durationSeconds": [[round(at - start, 1), value]
+                            for at, value in samples["scrape_duration_seconds"]],
+    }
+
+
 def parse_samples(raw: pathlib.Path) -> dict:
     activity, waits, database, locks = [], [], [], []
     for line in raw.read_text(encoding="utf-8").splitlines():
@@ -361,6 +401,11 @@ def main() -> int:
     # Prometheus is asked a minute either side, so a scrape that landed just outside the ramp is
     # still there to show what the system looked like before it and after it.
     series = {query: prometheus_range(query, started - 60, ended + 60) for query in PROMETHEUS_SERIES}
+    # Counted over the ramp alone, not the minute either side: a scrape that failed because the
+    # application was still starting or had already stopped is not the saturation being measured.
+    scrapes = scrape_health(started, ended)
+    print(f"[{arguments.name}] scrapes: {scrapes['succeeded']}/{scrapes['attempted']} succeeded, "
+          f"{scrapes['failed']} failed", flush=True)
 
     result = {
         "name": arguments.name,
@@ -374,6 +419,7 @@ def main() -> int:
         "k6": json.loads(summary.read_text(encoding="utf-8")) if summary.exists() else None,
         "postgres": parse_samples(raw_samples),
         "prometheus": series,
+        "scrapes": scrapes,
         "tablesBefore": before,
         "tablesAfter": table_sizes(),
     }

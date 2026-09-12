@@ -85,6 +85,7 @@ results/<name>.json
   k6              per-step counters and duration trends
   postgres        pg_stat_activity and pg_stat_database, sampled every two seconds
   prometheus      pool, outbox, CPU and counter series over the run window
+  scrapes         how many of those scrapes Prometheus actually got an answer to
   tablesBefore/After   row counts and on-disk size either side of the ramp
 ```
 

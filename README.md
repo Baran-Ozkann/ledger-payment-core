@@ -202,8 +202,10 @@ Amounts are always integers of minor units. `1250` is 12,50 TRY; `1250.00` is a 
 ([ADR-007](docs/adr/007-bigint-minor-units.md)).
 
 Read-only endpoints live on a management connector of their own on port 8081 — `/actuator/health`
-and `/actuator/prometheus` — so that a saturated API does not take the metrics with it. That split
-exists because phase 5 watched it happen; see below.
+and `/actuator/prometheus` — which is what makes them reachable from a container without exposing
+the API. The split was also meant to keep the metrics alive while the API saturated; re-running the
+load that killed them shows it does not, because the scrape blocks on the connection pool rather
+than on a thread. See below.
 
 ---
 
@@ -387,12 +389,15 @@ and that is reported rather than rounded away. [ADR-004](docs/adr/004-ordered-lo
   relay published ~50, ending the ramp 442 718 rows behind with `ledger_outbox_lag_seconds` at 602.
   Nothing is lost — `published_at IS NULL` cannot be outrun — but a consumer reading the projection
   is ten minutes stale for as long as the load lasts.
-- **The metrics endpoint died exactly when it mattered.** Under the hot-account run at 200 VUs and
-  above, 49 of 133 scrapes failed: all 200 Tomcat threads were blocked waiting for one of ten
-  connections, so none was left to serve `/actuator/prometheus`. The run was reportable only because
-  the database-side sampler is a psql session inside the container that owes the application
-  nothing. The management connector now has its own port; whether that holds under the same load has
-  not been re-measured.
+- **The metrics endpoint dies exactly when it matters, and moving it did not help.** Under the
+  hot-account run at 200 VUs and above, 49 of 133 scrapes failed. The management connector was then
+  given its own port on 8081, and scenario H re-run under it on 2026-09-12: **44 of 133 scrapes
+  failed**, first failure at the same offset. The scrape was never waiting for a thread — the API
+  served 8 995 requests during that step without dropping one — it was waiting for one of the ten
+  pool connections, because two of the gauges it renders query the outbox on every scrape. The run
+  is reportable only because the database-side sampler is a psql session inside the container that
+  owes the application nothing. Both observations are in
+  [load/RESULTS.md](load/RESULTS.md); the fix that would work is in [docs/future.md](docs/future.md).
 
 ---
 

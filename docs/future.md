@@ -53,22 +53,67 @@ Three things could move it, in increasing order of how much they give up:
 
 None of it was done in Phase 5, which measures rather than optimises.
 
-## Whether the split management port survives saturation — untested since Phase 5
+## The metrics endpoint still dies under saturation — the split port was not the fix
 
 Under the hot-account scenario at 200 VUs and above, the application stopped answering
 `/actuator/prometheus` altogether: 49 of 133 scrapes failed, all from the moment the 200 VU step
-began, with `scrape_duration_seconds` climbing to the 5 s timeout. All 200 Tomcat worker threads
-were blocked waiting for one of ten pool connections, so no thread was left to serve the scrape. The
-signal that says "the system is saturated" was the first thing saturation took away.
+began, with `scrape_duration_seconds` climbing to the 5 s timeout. The signal that says "the system
+is saturated" was the first thing saturation took away.
 
 Phase 5 could report the run anyway only because the database-side sampler is a psql session inside
 the container that owes the application nothing. That redundancy was luck of the harness design, not
 a property of the system.
 
-`management.server.port: 8081` has since given actuator its own connector, which is the usual fix
-and is why the scrape now has a thread pool of its own. **It has not been re-measured under the same
-load**, so what exists today is a plausible fix rather than a demonstrated one. Re-running scenario
-H and counting failed scrapes is the whole test, and it costs one eleven-minute ramp.
+Phase 5 read the cause as thread starvation — all 200 Tomcat workers blocked on ten pool
+connections, none left to serve the scrape — and `management.server.port: 8081` gave actuator its
+own connector, and with it its own thread pool. That was the usual fix for the stated cause, and it
+went in without being re-measured.
+
+**It has now been re-measured, and it does not work.** Scenario H re-run on 2026-09-12 under the
+split connector: **44 of 133 scrapes failed**, against 49 of 133 before, with the first failure at
+offset 423.5 s where the 200 VU step begins at 420 s. Same boundary, same timeout, five fewer
+failures out of 133 — noise, not a repair.
+`load/results/h-read-committed-split-connector.json`, written up in
+[load/RESULTS.md](../load/RESULTS.md) as a second observation beside the original.
+
+The reading that survives the second run is different from the first one. The connectors really are
+separate and the request threads really were available — the API served 8 995 requests during the
+200 VU step and dropped none of them. What the scrape cannot get is a **database connection**.
+`ledger_outbox_pending` and `ledger_outbox_lag_seconds` are a `COUNT(*)` and a `min(created_at)`
+over the outbox, evaluated inside the scrape, and they queue for the same ten-connection pool as
+every transfer. At the last scrape that returned: 10 connections active, 92 threads pending on the
+pool. A scrape costs two pool acquisitions, so it costs about two transfer latencies — 100 ms at
+10 VUs, 1.12 s at 50, 2.44 s at 100 — and 200 VUs is simply where two of them stop fitting inside
+Prometheus's 5 s timeout. Moving the connector could not have helped, because the connector was
+never what the scrape was waiting for.
+
+So the split port stays, on its own merits: it is what lets Prometheus reach the application from a
+container without the money-moving API being on the network. It is just not a fix for this.
+
+What would fix it, cheapest first:
+
+- **Stop doing database work inside a scrape.** The relay already takes a connection every 200 ms.
+  Have it publish the two outbox figures into plain in-memory gauges and let the scrape read the
+  last value it left. `/actuator/prometheus` then becomes a pure in-memory render that cannot queue
+  behind anything, and the endpoint keeps answering no matter how saturated the pool is.
+
+  Be honest about what this does and does not buy: under saturation the relay is queueing for the
+  same pool as everything else — it drains at a fourteenth of the write rate, which is the finding
+  directly above — so the published figures go stale by seconds rather than by 200 ms exactly when
+  they are most interesting. That is still the right trade. A gauge that is a few seconds behind is
+  a measurement; a scrape that times out is not one, and it takes `process_cpu_usage`,
+  `jvm_threads_live_threads` and the pool metrics themselves down with it — none of which touch the
+  database at all, and all of which were lost at 200 VUs for the sake of two that do.
+- **A connection the management side does not share**, one or two, on a second `DataSource`. It
+  keeps the gauges exact and live, and costs the ledger one or two of the connections it is already
+  short of — the same trade the relay's own pool would make, listed above.
+- **Raise `scrape_timeout`** above the saturated scrape duration. This is the one that looks like a
+  fix and is not: it buys a scrape that answers in eight seconds instead of failing at five, on a
+  5 s interval, while doing nothing about a metrics endpoint that gets slower in proportion to how
+  busy the system is.
+
+The first is the one to do. It is a few lines in `OutboxMetrics` and it removes the coupling rather
+than paying for it.
 
 ## Mutation testing — the optional Phase 6 item, dropped
 

@@ -1,8 +1,10 @@
 # Phase 5 — Load test results
 
-What the ledger's ceiling is, and what sets it. Everything below was measured on 2026-09-07.
-Nothing was tuned to improve a number, and the numbers that came out low are explained rather
-than fixed: phase 5 measures.
+What the ledger's ceiling is, and what sets it. Everything below was measured on 2026-09-07,
+with one later addition that says so on its face: a second observation of scenario H taken on
+2026-09-12, after the management port was split, to find out whether that fixed the scrapes the
+first observation lost. It did not. Nothing was tuned to improve a number, and the numbers that
+came out low are explained rather than fixed: phase 5 measures.
 
 Four runs, each preceded by emptying the database and rebuilding ten thousand funded accounts,
 so all four ramps read indexes the same depth.
@@ -256,6 +258,10 @@ The cause is the same saturation: all 200 Tomcat worker threads are blocked wait
 ten connections, so no thread is left to serve `/actuator/prometheus`. **The observability
 endpoint is a casualty of the condition it exists to report.**
 
+That last sentence still holds. The thread explanation in the one before it does not, and the
+second observation below is where it comes apart: the scrape is waiting for a pool connection, not
+for a thread, and giving it a thread pool of its own changed nothing.
+
 The consequence for this report, stated plainly: for scenario H the pool, outbox and CPU series
 cover the 10, 50 and 100 VU steps only. The 200 and 400 VU app-side numbers are absent because
 the measurement was not taken, not because the value was zero. The database-side numbers do
@@ -268,6 +274,102 @@ is reportable at all. Written up in `docs/future.md`.
 ![Where scenario U stops scaling](charts/saturation-u.svg)
 
 ![Where scenario H stops scaling](charts/saturation-h.svg)
+
+### Second observation: the same scenario after the management port was split — it still fails
+
+The paragraph above ends by naming a cause — Tomcat threads — and the fix that follows from it was
+applied: `management.server.port: 8081` gave actuator a connector of its own. That was written down
+as a plausible fix rather than a demonstrated one, because nothing re-ran scenario H to count.
+
+This is the count. **2026-09-12**, same machine, same k6 v2.2.0, same ramp, the fixture rebuilt from
+empty the same way, READ COMMITTED with ordered locking. The one thing changed is the configuration
+under test. It is a second observation, not a replacement: `results/h-read-committed.json` is
+untouched and remains the measurement this report is built on, and this run is
+`results/h-read-committed-split-connector.json`.
+
+| | Scrapes attempted | Succeeded | Failed |
+|---|---:|---:|---:|
+| Scenario H, one connector (2026-09-07) | 133 | 85 | **49** |
+| Scenario H, split connector (2026-09-12) | 133 | 89 | **44** |
+
+**The split did not fix it.** Five fewer failed scrapes out of 133 is not a fix; it is the same
+failure with run-to-run noise on it. The boundary did not move either — the first failure falls at
+offset 423.5 s, and the 200 VU step begins at 420 s, which is where the first observation put it.
+
+| Step | Scrapes | Succeeded | Failed | Median `scrape_duration_seconds` |
+|---|---:|---:|---:|---:|
+| warmup, 10 VU | 12 | 12 | 0 | 0.06 s |
+| 10 VU | 24 | 24 | 0 | 0.10 s |
+| 50 VU | 24 | 24 | 0 | 1.12 s |
+| 100 VU | 24 | 24 | 0 | 2.44 s |
+| 200 VU | 24 | 2 | **22** | 5.00 s — the timeout |
+| 400 VU | 24 | 2 | **22** | 5.00 s — the timeout |
+
+The four scrapes that did come back during those two steps took 4.94 s to 5.00 s: they beat the
+timeout by milliseconds rather than succeeding comfortably.
+
+The ramp itself is the same ramp. Throughput held flat at 77.5, 77.1, 77.0, 75.0 and 69.4 transfers
+per second against the first observation's 65.7 to 68.6 — the same ceiling, reached the same way, a
+few per cent faster. Latency doubled with each step above 50 VUs in both. This run dropped no
+connections at 400 VUs where the first dropped 581, which is the only material difference in the
+load itself.
+
+### Why it still fails: the scrape needs a pool connection, not a thread
+
+The thread explanation was not wrong, but it was not the binding constraint, and this run separates
+the two. The connectors really are split — the application log shows Tomcat started twice, on 8080
+and on 8081, each with its own thread pool — and **the API kept answering throughout**: 8 995
+requests served at the 200 VU step, every one of them a 201, none dropped. Request threads were
+available. The scrape still timed out.
+
+What `/actuator/prometheus` cannot get is a database connection. Two of the gauges it renders,
+`ledger_outbox_pending` and `ledger_outbox_lag_seconds`, are `COUNT(*)` and `min(created_at)` over
+the outbox, evaluated at scrape time. They queue for the same ten-connection pool as every transfer,
+and at saturation that pool is the thing there is none of: at the last scrape that came back, 10
+connections active, **92 threads pending on the pool**, and a worst acquire of 1.31 s. The
+database-side sampler agrees for the whole ramp — 10 backends, around eight of them asleep on the
+hot row's lock at every step, from 7.7 at 10 VUs to 8.5 at 400.
+
+The cost is visible in the arithmetic. A scrape costs almost exactly two transfer latencies, which
+is what two gauges each waiting their turn in the pool queue would cost:
+
+| Step | Transfer p50 | Two of them | Median scrape |
+|---|---:|---:|---:|
+| 10 VU | 59.7 ms | 119 ms | 100 ms |
+| 50 VU | 658 ms | 1 316 ms | 1 120 ms |
+| 100 VU | 1 305 ms | 2 610 ms | 2 440 ms |
+| 200 VU | 2 635 ms | 5 270 ms | **timed out at 5 000 ms** |
+
+The endpoint did not fall off a cliff at 200 VUs. It had been getting linearly slower since 50 VUs,
+tracking the pool queue exactly, and 200 VUs is simply the step at which two pool acquisitions stop
+fitting inside Prometheus's 5 s scrape timeout. Moving the connector changed none of that, because
+the connector was never what the scrape was waiting for.
+
+So the honest status of the split port: it is correct and worth keeping — it is why
+`/actuator/health` and the API no longer share an accept queue, and it is what makes the endpoint
+reachable at all from a container — but as a fix for scrapes lost under saturation it does not work,
+and this run says so rather than assuming it. What would work is not making a scrape do database
+work: cache the two outbox gauges on the relay's own schedule and let the scrape read the cached
+value. That is written up in `docs/future.md` rather than done here.
+
+### What this second observation is and is not
+
+- **One run, not repeated.** 44 against 49 is one observation against one observation. The claim
+  that survives repetition is the qualitative one: the endpoint stops answering at the 200 VU step,
+  in both configurations, at the same offset.
+- **A different PostgreSQL cluster.** Same image and version — 16.15-alpine, host port 5433 — but
+  system identifier **7683049503272800290**, where the 2026-09-07 runs used 7681416467163762722.
+  The container's volume was rebuilt between the two dates. The fixture was reseeded from empty
+  either way, so both ramps read indexes the same depth.
+- **A different database role.** This run connected as `ledger_app`, the unprivileged role the
+  system now ships with; the 2026-09-07 runs connected as the owner. See the note under "Which
+  database every measured run used".
+- **The earlier figure is quoted, not recounted.** Prometheus keeps 30 days, but its volume was
+  rebuilt too, so 2026-09-07's samples are gone and 49 of 133 is taken from this document as
+  recorded. The counting method matches what that figure describes: `up` has one raw sample per
+  scrape attempt, and 660 s of ramp at a 5 s scrape interval is the 133 both runs attempted.
+  `load/run.py` now records this count in every result file, under `scrapes`, so no future run has
+  to be counted by hand.
 
 ---
 
@@ -408,7 +510,9 @@ most consequential number in this report and it was left exactly where it was fo
   is between runs made under identical conditions, which is what the numbers are for.
 - **Scenario H has no app-side metrics above 100 VUs.** The application could not serve its own
   scrape endpoint while saturated; 49 of 133 scrapes failed. Those figures are absent rather than
-  guessed.
+  guessed. The second observation on 2026-09-12, with the management connector on its own port,
+  lost 44 of 133 at the same offset, so this limit is a property of the system rather than of that
+  one run.
 - **The outbox backlog does not start at zero.** Seeding leaves roughly 12 000 unpublished rows,
   so `ledger_outbox_lag_seconds` reads about 150 s at the start of each ramp.
 - **Each run reseeds from empty**, so all four started at 10 002 accounts and ~20 000 entries.
@@ -426,7 +530,9 @@ most consequential number in this report and it was left exactly where it was fo
   measurement: 68 transfers per second, 5.5× slower than uncontended, caused by 14.6 ms of serial
   hold on one row, with nine of ten connections asleep and the CPU idle.
 - Two findings are written into `docs/future.md` rather than fixed here: the relay's drain rate
-  under load, and the metrics endpoint being unavailable at exactly the moment it matters.
+  under load, and the metrics endpoint being unavailable at exactly the moment it matters. The
+  second of those has since been re-measured under the split management port and is still open —
+  the port was not what it was waiting for.
 
 ## Reproducing this
 

@@ -17,6 +17,7 @@ import com.baran.ledger.domain.Account;
 import com.baran.ledger.domain.AccountActivityEvent;
 import com.baran.ledger.domain.AccountType;
 import com.baran.ledger.domain.EntryPosting;
+import com.baran.ledger.domain.EntryReference;
 import com.baran.ledger.domain.IdempotencyRecord;
 import com.baran.ledger.domain.IdempotencyRequest;
 import com.baran.ledger.domain.LedgerEntry;
@@ -145,15 +146,13 @@ public class LedgerService {
 
         UUID publicId = UUID.randomUUID();
         long reversalId = insertReversal(publicId, original);
+        LedgerTransaction reversal = transaction(publicId);
         for (EntryPosting posting : postings) {
             long flipped = Math.negateExact(posting.amount());
             applyToBalance(posting.accountId(), flipped);
-            entries.insert(reversalId, posting.accountId(), flipped, posting.currency());
+            EntryReference entry = entries.insert(reversalId, posting.accountId(), flipped, posting.currency());
+            announce(reversal, posting.accountPublicId(), flipped, posting.currency(), entry);
         }
-
-        LedgerTransaction reversal = transaction(publicId);
-        postings.forEach(posting -> announce(
-                reversal, posting.accountPublicId(), Math.negateExact(posting.amount()), posting.currency()));
         return reversal;
     }
 
@@ -224,12 +223,14 @@ public class LedgerService {
         long transactionId = transactions.insert(publicId, txType, description);
         debit(source.id(), amount.minorUnits());
         accounts.credit(destination.id(), amount.minorUnits());
-        entries.insert(transactionId, source.id(), amount.negated().minorUnits(), source.currency());
-        entries.insert(transactionId, destination.id(), amount.minorUnits(), destination.currency());
+        EntryReference debited = entries.insert(
+                transactionId, source.id(), amount.negated().minorUnits(), source.currency());
+        EntryReference credited = entries.insert(
+                transactionId, destination.id(), amount.minorUnits(), destination.currency());
 
         LedgerTransaction transaction = transaction(publicId);
-        announce(transaction, source.publicId(), amount.negated().minorUnits(), source.currency());
-        announce(transaction, destination.publicId(), amount.minorUnits(), destination.currency());
+        announce(transaction, source.publicId(), amount.negated().minorUnits(), source.currency(), debited);
+        announce(transaction, destination.publicId(), amount.minorUnits(), destination.currency(), credited);
         return transaction;
     }
 
@@ -241,9 +242,11 @@ public class LedgerService {
      * <p>One event per entry, keyed by the account: the account is the aggregate a consumer cares
      * about, and it is what the partition key has to be for per-account ordering to mean anything.
      */
-    private void announce(LedgerTransaction transaction, UUID accountPublicId, long amount, String currency) {
+    private void announce(
+            LedgerTransaction transaction, UUID accountPublicId, long amount, String currency, EntryReference entry) {
         AccountActivityEvent event = new AccountActivityEvent(
-                transaction.publicId(), accountPublicId, amount, currency, transaction.txType());
+                transaction.publicId(), accountPublicId, amount, currency, transaction.txType(),
+                entry.id(), entry.createdAt());
         outbox.append(
                 AccountActivityEvent.AGGREGATE_TYPE,
                 accountPublicId.toString(),

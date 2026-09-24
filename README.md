@@ -45,7 +45,7 @@ flowchart TB
 
     svc --> claim
     obx -.->|"published_at IS NULL<br/>FOR UPDATE SKIP LOCKED"| relay
-    relay -->|"key = account public id"| kafka[["Kafka<br/>account.activity"]]
+    relay -->|"key = account public id"| kafka[["Kafka<br/>ledger.account-activity"]]
     kafka --> proj
     proj --> activity[("account_activity<br/>+ consumed_events dedup")]
     recon -.->|"I2, I3"| ent
@@ -209,9 +209,46 @@ than on a thread. See below.
 
 ---
 
+## Event contract
+
+Every ledger entry produces one event on the topic `ledger.account-activity`, published by the
+outbox relay ([ADR-003](docs/adr/003-transactional-outbox.md)). A transfer writes two entries, so
+it produces two events, one for each account.
+
+| Part | Value |
+|---|---|
+| Key | The account's public id, as a UUID string. Every event for one account lands on one partition, so events are ordered per account and not across the topic |
+| Header `event-id` | **Required.** The outbox row id as a decimal string. This is the deduplication key: delivery is at-least-once, and a repeat carries the same `event-id` |
+| Value | A UTF-8 JSON object, below |
+
+| Field | JSON type | Meaning |
+|---|---|---|
+| `transaction_id` | string (UUID) | Public id of the transaction the entry belongs to |
+| `account_id` | string (UUID) | Public id of the account the entry was posted to; equal to the key |
+| `amount` | integer (int64) | Signed, in minor units: negative on the account that was debited |
+| `currency` | string | ISO 4217 code of the entry |
+| `tx_type` | string | `TRANSFER`, `FUNDING` or `REVERSAL` today; the schema already allows further types |
+| `entry_id` | integer (int64) | `ledger_entries.id` of the entry this event describes. A reversal's events name the reversal's own entries, never the original's |
+| `created_at` | string | That entry's `created_at`: UTC, always six fractional digits, `yyyy-MM-ddTHH:mm:ss.SSSSSSZ` — for example `2026-09-24T00:00:00.000000Z`. Fixed width, so the strings sort as the instants do |
+
+`created_at` is when the ledger wrote the entry, not when the relay published it. The Kafka record
+timestamp is the publish time, which falls on the wrong side of a date boundary whenever the relay
+is behind. The column defaults to `now()`, which is the start of the database transaction, so both
+entries of one transfer carry the same `created_at`.
+
+**Events written before `entry_id` and `created_at` existed carry only the first five fields.**
+That covers everything already on the topic, which a consumer group reading from the start will see
+first, and any outbox row still unpublished when the change was deployed. Nothing is backfilled.
+
+The contract only grows. Fields are appended; none is renamed, retyped or removed.
+`OutboxRelayTest.deliveredPayloadKeepsTheContractShape` reads the delivered bytes as plain JSON and
+fails on any other shape.
+
+---
+
 ## Test strategy
 
-`./mvnw verify` runs **92 tests in 1 m 28 s**, PostgreSQL and Kafka containers included. CI splits
+`./mvnw verify` runs **97 tests in 2 m 49 s**, PostgreSQL and Kafka containers included. CI splits
 them into two jobs, so a broker that will not start is never mistaken for a ledger that does not
 work.
 
@@ -239,6 +276,8 @@ does not produce simultaneity.
 | No deadlock under opposing transfers | `TransferConcurrencyTest.bidirectionalNoDeadlock`, run five consecutive times |
 | A repeat gets the first attempt's response | `IdempotencyTest.replayedCreateReturnsTheStoredResponse`, `sameKeyDifferentBody`, `sameKeyDifferentEndpoint` |
 | Event written atomically with the money | `OutboxWriteTest.outboxWrittenAtomically`, `outboxNotWrittenOnRollback` |
+| An event names its own entry, to the microsecond | `OutboxWriteTest.eventNamesTheEntryItDescribes`, `reversalEventsNameTheReversalsEntries`, `createdAtAlwaysCarriesSixFractionalDigits` |
+| The event contract only grows | `OutboxRelayTest.deliveredPayloadKeepsTheContractShape`, `AccountActivityProjectionTest.eventWrittenBeforeTheEntryReferenceIsStillApplied` |
 | Redelivery is a no-op | `AccountActivityProjectionTest.consumerReplayIdempotent` |
 | Per-account event ordering | `AccountActivityProjectionTest.perAccountOrdering` |
 | One trace from HTTP to consumer | `TracePropagationTest.oneTraceSpansTheRequestAndTheConsumer` |
@@ -264,6 +303,9 @@ and the passing output recorded. What that produced:
 | `ON CONFLICT` and the unique constraint removed | 100 transactions where there should be 1 |
 | Consumer dedup insert removed | `consumerReplayIdempotent` reports a net of 2400 instead of 1200 |
 | Producer observation switched off | the consumer lands in a different trace and `TracePropagationTest` says so |
+| `tx_type` renamed on the event record | `deliveredPayloadKeepsTheContractShape` fails, while `relayPublishesAndMarks`, which round-trips through the same record, stays green |
+| Entry references swapped, reversal pointed at the original, `created_at` truncated to ms or its format pin removed | each fails `OutboxWriteTest` on the exact field; only the fixed-instant test sees the pin removed |
+| `entry_id` made required on read | the projection refuses a five-field event with `Missing required creator property 'entry_id'` and `eventWrittenBeforeTheEntryReferenceIsStillApplied` times out |
 | V1, V3 and V7 checks deleted | a negative transfer is answered `201 CREATED` and moves money backwards — [ADR-009](docs/adr/009-validation-rules-are-not-invariants.md) has the full output |
 
 ---

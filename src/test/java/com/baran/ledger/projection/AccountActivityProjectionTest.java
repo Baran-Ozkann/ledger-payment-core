@@ -81,6 +81,32 @@ class AccountActivityProjectionTest extends AbstractKafkaIntegrationTest {
                 () -> new Activity(9L, 6_400L).equals(activityOf(account)));
     }
 
+    /**
+     * Rows still waiting in the outbox when entry_id and created_at were added, and records a new
+     * group replays from the start of the topic, carry only the first five fields. The projection
+     * reads neither of the new ones, so it has no reason to refuse them.
+     */
+    @Test
+    void eventWrittenBeforeTheEntryReferenceIsStillApplied() {
+        Account account = ledger.createAccount(AccountType.LIABILITY, "owner");
+
+        insertFiveFieldEvent(account.publicId(), 450L);
+
+        await("the old-shaped event is projected", () -> new Activity(1L, 450L).equals(activityOf(account)));
+    }
+
+    /** Written straight to the table, because the service can no longer produce this shape. */
+    private void insertFiveFieldEvent(UUID accountPublicId, long amount) {
+        jdbc.sql("""
+                        INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload)
+                        VALUES ('ACCOUNT', ?, 'account.entry_posted', ?::jsonb)""")
+                .params(accountPublicId.toString(), """
+                        {"transaction_id": "%s", "account_id": "%s", "amount": %d,
+                         "currency": "TRY", "tx_type": "TRANSFER"}"""
+                        .formatted(UUID.randomUUID(), accountPublicId, amount))
+                .update();
+    }
+
     private void republish(long eventId) {
         jdbc.sql("UPDATE outbox_events SET published_at = NULL WHERE id = ?").param(eventId).update();
     }

@@ -1,9 +1,12 @@
 package com.baran.ledger.outbox;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
 
 import com.baran.ledger.AbstractKafkaIntegrationTest;
 import com.baran.ledger.EventProbe;
@@ -39,6 +42,32 @@ class OutboxRelayTest extends AbstractKafkaIntegrationTest {
         assertThat(eventOf(delivered))
                 .isEqualTo(new AccountActivityEvent(
                         transfer.publicId(), destination.publicId(), 1_200L, "TRY", transfer.txType()));
+    }
+
+    /**
+     * Read as a plain tree, never through {@link AccountActivityEvent}: a consumer outside this
+     * repository parses these bytes, not the record, and a field renamed on the record would pass
+     * any assertion that deserializes into that same record.
+     */
+    @Test
+    void deliveredPayloadKeepsTheContractShape() {
+        Account source = fundedAccount(5_000L);
+        Account destination = ledger.createAccount(AccountType.LIABILITY, "owner");
+
+        ledger.transfer(source.publicId(), destination.publicId(), Money.of(1_200L), "salary");
+
+        await("the credited account's event is delivered",
+                () -> probe.deliveriesFor(destination.publicId()).size() == 1);
+
+        JsonNode payload = json.readTree(probe.deliveriesFor(destination.publicId()).getFirst().payload());
+        assertThat(shapeOf(payload))
+                .as("exactly these keys, each with exactly this JSON type")
+                .isEqualTo(Map.of(
+                        "transaction_id", "string",
+                        "account_id", "string",
+                        "amount", "integer",
+                        "currency", "string",
+                        "tx_type", "string"));
     }
 
     /**
@@ -98,5 +127,14 @@ class OutboxRelayTest extends AbstractKafkaIntegrationTest {
 
     private List<Long> deliveredIds(UUID accountPublicId) {
         return probe.deliveriesFor(accountPublicId).stream().map(EventProbe.Delivery::eventId).toList();
+    }
+
+    private static Map<String, String> shapeOf(JsonNode payload) {
+        return payload.properties().stream().collect(Collectors.toMap(
+                Map.Entry::getKey, property -> typeOf(property.getValue())));
+    }
+
+    private static String typeOf(JsonNode value) {
+        return value.isIntegralNumber() ? "integer" : value.getNodeType().name().toLowerCase();
     }
 }

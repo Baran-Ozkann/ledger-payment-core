@@ -45,7 +45,7 @@ flowchart TB
 
     svc --> claim
     obx -.->|"published_at IS NULL<br/>FOR UPDATE SKIP LOCKED"| relay
-    relay -->|"key = account public id"| kafka[["Kafka<br/>account.activity"]]
+    relay -->|"key = account public id"| kafka[["Kafka<br/>ledger.account-activity"]]
     kafka --> proj
     proj --> activity[("account_activity<br/>+ consumed_events dedup")]
     recon -.->|"I2, I3"| ent

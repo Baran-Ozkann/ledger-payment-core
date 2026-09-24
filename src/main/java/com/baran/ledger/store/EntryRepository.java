@@ -10,6 +10,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 import com.baran.ledger.domain.EntryPosting;
+import com.baran.ledger.domain.EntryReference;
 import com.baran.ledger.domain.LedgerEntry;
 
 @Repository
@@ -34,12 +35,15 @@ public class EntryRepository {
      * silently disagree with the account the moment two currencies exist, and the entry is the
      * record of what was actually moved.
      */
-    public void insert(long transactionId, long accountId, long amount, String currency) {
-        jdbc.sql("""
+    public EntryReference insert(long transactionId, long accountId, long amount, String currency) {
+        return jdbc.sql("""
                         INSERT INTO ledger_entries (transaction_id, account_id, amount, currency)
-                        VALUES (?, ?, ?, ?)""")
+                        VALUES (?, ?, ?, ?)
+                        RETURNING id, created_at""")
                 .params(transactionId, accountId, amount, currency)
-                .update();
+                .query((rs, rowNum) -> new EntryReference(
+                        rs.getLong("id"), rs.getObject("created_at", OffsetDateTime.class).toInstant()))
+                .single();
     }
 
     public List<LedgerEntry> findByTransaction(long transactionId) {

@@ -1,6 +1,52 @@
 # Progress
 
-**Current phase:** 6 — Packaging
+**Current work:** `entry_id` and `created_at` on the account activity event, for an external
+reconciliation service
+**Branch:** event-entry-reference (branched from main, which carries phases 0 to 6)
+**Last updated:** 2026-09-24
+
+## Entry reference on the activity event
+
+- [x] `OutboxRelayTest.deliveredPayloadKeepsTheContractShape` reads the delivered payload as plain
+  JSON and pins every key with its JSON type. An external reader parses the bytes, not the record
+- [x] README diagram names the topic `ledger.account-activity`, as `EventTopics` declares it; it
+  said `account.activity`, and a consumer subscribed to that
+- [x] `EntryRepository.insert` returns the entry's `id` and `created_at` through `RETURNING`, and
+  `LedgerService.announce` puts them on the event. A reversal's events name the reversal's own
+  entries. `created_at` is always six fractional digits in UTC, pinned with `@JsonFormat`
+- [x] Both new record components are boxed. A five-field event from before the change reads as
+  null, not as entry zero, and the projection still applies it
+- [x] README "Event contract" section: key, the required `event-id` header, the seven fields, and
+  that older events carry five
+
+### Break proof
+
+Each mechanism broken, the failure recorded, then restored and passing:
+
+- `tx_type` renamed through `@JsonProperty("type")`: `deliveredPayloadKeepsTheContractShape` fails,
+  `expected {…"tx_type"="string"} but was {…"type"="string"}`. `relayPublishesAndMarks` stayed green
+- The debit and credit references swapped in `post`: `eventNamesTheEntryItDescribes` fails with
+  entry ids 3 and 4 exchanged between the two accounts
+- The reversal announcing the original transaction's entries: `reversalEventsNameTheReversalsEntries`
+  fails, `entryId=8/7` where the reversal wrote `10/9`
+- `@JsonFormat` removed: `createdAtAlwaysCarriesSixFractionalDigits` fails,
+  `expected "2026-09-24T00:00:00.000000Z" but was "2026-09-24T00:00:00Z"`. The two live-transfer
+  tests passed in that run, because their instants did not happen to end in zero; that is why the
+  fixed-instant test exists
+- `created_at` truncated to milliseconds: both live-transfer tests fail, `.905125Z` stored against
+  `.905000Z` announced
+- `entry_id` made `required` on read: the projection logs `Missing required creator property
+  'entry_id'` and `eventWrittenBeforeTheEntryReferenceIsStillApplied` times out after a minute
+
+### Verification
+
+- `./mvnw -B verify`: **97 tests, 0 failures, 2 m 49 s**
+- `bash ci/check-rules.sh`: exits 0
+
+---
+
+# Phase 6 — Packaging
+
 **Branch:** phase-6-docs (branched from main, which carries phases 0 to 5)
 **Last updated:** 2026-09-08
 

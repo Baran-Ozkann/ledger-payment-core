@@ -62,6 +62,8 @@ def format_count(value: float) -> str:
 
 
 def format_number(value: float) -> str:
+    if value == 0:
+        return "0"
     if value >= 1000:
         return f"{value:,.0f}"
     if value >= 10:

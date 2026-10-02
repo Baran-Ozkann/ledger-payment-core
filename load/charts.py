@@ -328,9 +328,9 @@ def chart_isolation(results):
         kept = sum(row["requests"] for row in tables[ordered])
         parts.append(text(64 + index * 420, 406,
                           f"ordered locking refused 0 of {kept:,}", 11, INK_SOFT))
-    parts.append(legend(64, 368, [("READ COMMITTED with ordered locking", BLUE),
+    parts.append(legend(64, 434, [("READ COMMITTED with ordered locking", BLUE),
                                   ("SERIALIZABLE with up to five attempts", ORANGE)]))
-    return document(880, 424, "".join(parts),
+    return document(880, 452, "".join(parts),
                     "READ COMMITTED with ordered locking against SERIALIZABLE with retries")
 
 

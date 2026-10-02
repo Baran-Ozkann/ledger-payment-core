@@ -248,15 +248,15 @@ def chart_throughput(results):
     series = [[row["tps"] for row in step_table(results[name])]
               for name in ("u-read-committed", "h-read-committed")]
     top = nice_ceiling(max(max(values) for values in series))
-    panel = Panel(64, 64, 760, 300, top, labels)
+    panel = Panel(64, 84, 760, 300, top, labels)
     body = (
         text(24, 30, "Transfers committed per second", 15, INK, weight="600")
         + text(24, 48, "READ COMMITTED with ordered locking, two minutes per step", 11, INK_SOFT)
         + panel.axes("tx/s")
         + panel.columns(series, [BLUE, ORANGE], ["Scenario U", "Scenario H"])
-        + legend(64, 408, [("Scenario U - random pairs", BLUE),
+        + legend(64, 428, [("Scenario U - random pairs", BLUE),
                            ("Scenario H - one shared REVENUE account", ORANGE)]))
-    return document(880, 430, body, "Committed transfers per second, scenario U against scenario H")
+    return document(880, 450, body, "Committed transfers per second, scenario U against scenario H")
 
 
 def chart_latency(results):

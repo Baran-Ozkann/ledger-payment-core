@@ -270,7 +270,7 @@ def chart_latency(results):
              text(24, 48, "Log scale, shared between the two panels; VUs along the bottom",
                   11, INK_SOFT)]
     for index, (name, title, colour) in enumerate(names):
-        panel = Panel(64 + index * 420, 78, 330, 280,
+        panel = Panel(64 + index * 420, 96, 330, 262,
                       nice_ceiling(highest), labels, y_min=max(lowest / 2, 1.0), log=True)
         parts.append(text(64 + index * 420, 70, title, 12, INK, weight="600"))
         parts.append(panel.axes("ms" if index == 0 else ""))
@@ -313,7 +313,7 @@ def chart_isolation(results):
              text(24, 48, "Transfers that committed, per second. Same scale in both panels; VUs along the bottom",
                   11, INK_SOFT)]
     for index, (title, ordered, serializable) in enumerate(pairs):
-        panel = Panel(64 + index * 420, 82, 330, 268, top, labels)
+        panel = Panel(64 + index * 420, 100, 330, 250, top, labels)
         parts.append(text(64 + index * 420, 74, title, 12, INK, weight="600"))
         parts.append(panel.axes("tx/s" if index == 0 else ""))
         parts.append(panel.columns(

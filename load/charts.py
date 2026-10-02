@@ -344,13 +344,13 @@ def chart_saturation(result, title, subtitle):
     lag = series_of(result, "ledger_outbox_lag_seconds")
 
     rows = [
-        (f"Pool connections in use (max {format_count(pool_max)})",
+        (("Pool connections in use", f"(max {format_count(pool_max)})"),
          [(pool_active, BLUE, "active")], pool_max, format_count),
-        ("Threads queued for a connection", [(pool_pending, ORANGE, "pending")],
+        (("Threads queued", "for a connection"), [(pool_pending, ORANGE, "pending")],
          nice_ceiling(max([value for _, value in pool_pending] or [1])), format_count),
-        ("Backends waiting on a row lock", [(waiting, AQUA, "waiting on Lock")],
+        (("Backends waiting", "on a row lock"), [(waiting, AQUA, "waiting on Lock")],
          max(nice_ceiling(max([value for _, value in waiting] or [1])), 2.0), format_count),
-        ("Outbox lag (seconds)", [(lag, YELLOW, "oldest unpublished row")],
+        (("Outbox lag", "(seconds)"), [(lag, YELLOW, "oldest unpublished row")],
          nice_ceiling(max([value for _, value in lag] or [1])), format_count),
     ]
 
@@ -358,7 +358,10 @@ def chart_saturation(result, title, subtitle):
     warmup, step = result["k6"]["warmupSeconds"], result["k6"]["stepSeconds"]
     for index, (label, series, top, formatter) in enumerate(rows):
         panel = Panel(180, 78 + index * 122, 660, 88, top, [""], ticks=2)
-        parts.append(text(172, 78 + index * 122 + 46, label, 11, INK_SOFT, "end"))
+        # Two short lines, left-aligned, set between the top and middle ticks. One long line
+        # ending at the tick column ran straight through the middle tick's number.
+        for line, offset in zip(label, (20, 34)):
+            parts.append(text(24, panel.top + offset, line, 11, INK_SOFT))
         parts.append(panel.axes("", formatter))
         for boundary, vus in enumerate(result["k6"]["steps"]):
             at = start + warmup + boundary * step

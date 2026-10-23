@@ -40,3 +40,6 @@ load/accounts.json
 # Python bytecode from the load harness
 __pycache__/
 *.pyc
+
+# Local secrets; .env.example holds the key names
+.env
